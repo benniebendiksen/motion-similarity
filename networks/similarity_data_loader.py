@@ -1,4 +1,5 @@
 import keras
+import torch
 import tensorflow as tf
 import numpy as np
 
@@ -78,12 +79,27 @@ class SimilarityDataLoader(keras.utils.Sequence):
     #     batch_labels = tf.constant(self.class_indexes)
     #     return batch_features, batch_labels
 
+    # def __getitem__(self, index):
+    #     # Collect features for all class tuples and convert to a tensor
+    #     batch_features = tf.convert_to_tensor(
+    #         [self.dict_similarity_exemplars[class_tuple][0] for class_tuple in self.list_tuples_dict_idx_class_tuple]
+    #     )
+    #     # Ensure the tensor has a channel dimension (e.g., for compatibility with convolutional models)
+    #     batch_features = batch_features[..., tf.newaxis]
+    #     # Return the batch of features along with their corresponding class labels
+    #     return batch_features, tf.constant(self.class_indexes)
+
     def __getitem__(self, index):
-        # Collect features for all class tuples and convert to a tensor
-        batch_features = tf.convert_to_tensor(
-            [self.dict_similarity_exemplars[class_tuple][0] for class_tuple in self.list_tuples_dict_idx_class_tuple]
-        )
-        # Ensure the tensor has a channel dimension (e.g., for compatibility with convolutional models)
-        batch_features = batch_features[..., tf.newaxis]
-        # Return the batch of features along with their corresponding class labels
-        return batch_features, tf.constant(self.class_indexes)
+        # Convert NumPy arrays directly to PyTorch tensors
+        batch_features = torch.from_numpy(
+            np.array([self.dict_similarity_exemplars[class_tuple][0] for class_tuple in
+                      self.list_tuples_dict_idx_class_tuple])
+        ).float()  # Ensure correct dtype for model input
+
+        # Add a channel dimension (for CNN compatibility, e.g., [batch_size, channels, height, width])
+        batch_features = batch_features.unsqueeze(-1)  # Equivalent to tf.newaxis
+
+        # Convert class indexes to a PyTorch tensor
+        class_labels = torch.tensor(self.class_indexes, dtype=torch.long)
+
+        return batch_features, class_labels

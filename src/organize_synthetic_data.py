@@ -275,8 +275,8 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
                                    anim_name=anim_name)
     dict_similarity_classes_exemplars = pickle.load(open(file_path, "rb"))
     # Keys (sample): [(0, 0, 0, 0), (0, -1, -1, -1), (-1, 0, -1, -1), (0, 0, -1, -1), (1, 0, -1, -1)]
-    # where each value is a list of a single tensor (e.g, shape: (137, 88)) and all such tensors have been made uniform
-    # in their frame count
+    # where each value is a list of a single numpy array (e.g, shape: (137, 88)) and all such tensors have been made uniform in their frame count
+    #TODO: verif that we are indeed storing numpy arrays as the payload. And, given how motion units as opposed to snippets, eliminate the list use
     print(f"loaded dict_similarity_classes_exemplars for anim {anim_name}")
 
     if bool_drop:
