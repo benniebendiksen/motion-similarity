@@ -13,7 +13,6 @@ from sklearn.pipeline import Pipeline
 import numpy as np
 import pickle
 import warnings
-import random
 
 anim_ind = {'WALKING': 0, 'POINTING': 1, 'PICKING': 2, 'WAVING': 3, 'THROWING': 4, 'AIMING': 5, 'JUMPING': 6,
             'RUNNING': 7}
@@ -255,55 +254,6 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
     except Exception as e:
         print(f"Error in prep_all_data_for_training: {e}")
         sys.exit()
-
-
-# def load_data(rotations=True, velocities=False):
-#     """
-#     Load motion data for training if available, otherwise prepare it first.
-#
-#     Args:
-#         rotations (bool): Whether to include rotations in the loaded data.
-#         velocities (bool): Whether to include velocities in the loaded data.
-#
-#     Returns:
-#         partition (dict): A dictionary containing the partitioned efforts network data.
-#         labels_dict (dict): A dictionary containing labels (efforts values).
-#     """
-#     if not os.path.exists(config_instance.effort_network_exemplars_dir):
-#         os.makedirs(conf.effort_network_exemplars_dir)
-#         prep_all_data_for_training(rotations=rotations, velocities=velocities)
-#     # csv_file = os.path.join(conf.output_metrics_dir, f'{conf.num_task}_{conf.window_delta}.csv')
-#     # if path.exists(conf.effort_network_exemplars_dir) and not path.exists(csv_file):
-#     #     shutil.rmtree(conf.effort_network_exemplars_dir)
-#     #     os.makedirs(conf.effort_network_exemplars_dir)
-#     #     prep_all_data_for_training(rotations=rotations, velocities=velocities)
-#     # elif not path.exists(csv_file):
-#     #     prep_all_data_for_training(rotations=rotations, velocities=velocities)
-#     partition, labels_dict = _partition_effort_ids_and_labels()
-#     return partition, labels_dict
-
-
-# def _partition_effort_ids_and_labels(train_val_split=0.8):
-#     """
-#     Partition effort IDs and labels for training, validation, and testing.
-#
-#     Args:
-#         train_val_split (float): The percentage of data to be used for training.
-#
-#     Returns:
-#         partition (dict): A dictionary containing the partitioned data.
-#         labels_dict (dict): A dictionary containing labels for the data.
-#     """
-#     with open(conf.effort_network_exemplars_dir + conf.efforts_labels_dict_file_name, 'rb') as handle:
-#         labels_dict = pickle.load(handle)
-#     batch_ids_list = list(labels_dict.keys())
-#     random.shuffle(batch_ids_list)
-#     train_size = int(train_val_split * len(batch_ids_list))
-#     test_val_size = int(((1 - train_val_split) * len(batch_ids_list)) / 2)
-#     partition = {'train': batch_ids_list[:train_size], 'validation': batch_ids_list[train_size:test_val_size],
-#                  'test': batch_ids_list[-test_val_size:]}
-#     return partition, labels_dict
-
 
 def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     """

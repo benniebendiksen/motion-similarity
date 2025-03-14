@@ -3,8 +3,6 @@ static module for organizing triplet mining data as well as performing online tr
 """
 from pathlib import Path
 import tensorflow as tf
-# tf.config.experimental_run_functions_eagerly(True)
-import numpy as np
 import pandas as pd
 import ast
 import pickle

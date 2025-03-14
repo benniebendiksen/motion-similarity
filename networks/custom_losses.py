@@ -25,33 +25,7 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_
                     Returns:
                         losses: tensor of shape (triplet_mining.num_states_drives, triplet_mining.num_states_drives)
             """
-    # must flatten y_true to tensor of ints in order to sort it
-    # custom_losses: calculate_triplet_loss: y_true_shape: [57  4]
-    # custom_losses: calculate_triplet_loss: y_pred_shape: [57 32]
-    # print(f"custom_losses:calculate_triplet_loss: y_true_shape: {tf.shape(y_true)}")
-    # print(f"custom_losses:calculate_triplet_loss: y_pred_shape: {tf.shape(y_pred)}")
 
-
-    # y_true_flat = tf.reshape(y_true, [-1])
-
-
-
-    # print(f"custom_losses:calculate_triplet_loss: y_true_flat shape: {y_true_flat.shape}")
-
-
-    # sorted_indices = tf.argsort(y_true_flat)
-
-
-    # print(f"custom_losses:calculate_triplet_loss: sorted_indices shape: {sorted_indices.shape}")
-    # print(f"custom_losses:calculate_triplet_loss: sorted_indices example: {sorted_indices[0]}")
-    # print(f"custom_losses:calculate_triplet_loss: y_true example: {y_true[0]}")
-
-
-    # y_true = tf.gather(y_true, sorted_indices)
-    # y_pred = tf.gather(y_pred, sorted_indices)
-
-
-    # of shape (batch_size - 1) x (batch_size - 1)
     classes_distances = triplet_mining.calculate_left_right_distances(y_pred)
     triplet_mining.calculate_class_neut_distances(y_pred)
 
@@ -80,7 +54,6 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_
         triplet_loss_L_R = diff_lr_alpha
 
         tf.debugging.assert_equal(triplet_loss_L_R, tf.maximum(triplet_loss_L_R, 0.0), message="Negative losses exist")
-
 
     # consider only cases where diff_lr_ln < 0 yet triplet_loss_L_N > 0 (i.e., l_r - l_n < 0 and l_r - l_n + alpha > 0)
     elif batch_strategy == BatchStrategy.SEMI_HARD:
@@ -232,28 +205,14 @@ def create_batch_triplet_loss(triplet_mining_modules):
             triplet_loss: scalar tensor containing the triplet loss
         """
 
-        # print(f"custom_losses:calculate_triplet_loss: y_true pre sort: {y_true}")
-        ## print(f"y_pred: {y_pred}")
-        ## print(f"y_pred min: {tf.reduce_min(y_pred)}")
-        ## print(f"y_pred max: {tf.reduce_max(y_pred)}")
-        ## print(f"y_pred mean: {tf.reduce_mean(y_pred)}")
-        ## print(f"y_pred std: {tf.math.reduce_std(y_pred)}")
-        ## Calculate the triplet loss for each TripletMining module
-        # y_true_flat = tf.reshape(y_true, [-1])
-        # # print(f"custom_losses:calculate_triplet_loss: y_true_flat shape: {y_true_flat.shape}")
-        # sorted_indices = tf.argsort(y_true_flat)
-        # # print(f"custom_losses:calculate_triplet_loss: sorted_indices shape: {sorted_indices.shape}")
-        # # print(f"custom_losses:calculate_triplet_loss: sorted_indices example: {sorted_indices[0]}")
-        # # print(f"custom_losses:calculate_triplet_loss: y_true example: {y_true[0]}")
-        # y_true = tf.gather(y_true, sorted_indices)
-        # y_pred = tf.gather(y_pred, sorted_indices)
-
         y_true_flat = tf.reshape(y_true, [-1])
-        # Perform a stable sort: First by y_true, then by original batch order
+        print(f"custom_losses:calculate_triplet_loss: y_true pre sort: {y_true}")
         sorted_indices = tf.argsort(y_true_flat)
+        print(f"custom_losses:calculate_triplet_loss: sorted_indices shape: {sorted_indices.shape}")
+        print(f"custom_losses:calculate_triplet_loss: sorted_indices example: {sorted_indices[0]}")
         y_true = tf.gather(y_true, sorted_indices)
         y_pred = tf.gather(y_pred, sorted_indices)
-        # print(f"custom_losses:calculate_triplet_loss: y_true post sort: {y_true}")
+        print(f"custom_losses:calculate_triplet_loss: y_true post sort: {y_true}")
 
 
 
@@ -263,13 +222,6 @@ def create_batch_triplet_loss(triplet_mining_modules):
             # Index the batch labels and values with respect to the current TripletMining module
             y_true_module = y_true[i * triplet_mining.batch_size:(i + 1) * triplet_mining.batch_size]
             y_pred_module = y_pred[i * triplet_mining.batch_size:(i + 1) * triplet_mining.batch_size]
-            # y_true_module = y_true
-            # y_pred_module = y_pred
-
-            # Add debugging statements
-            # print(f"y_true_module size: {y_true_module.shape}")
-            # print(f"example y_true_module value: {y_true_module[1]}")
-            # print(f"y_pred_module size: {y_pred_module.shape}")
 
             triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining)
             # Combine the losses
@@ -295,48 +247,3 @@ def create_batch_triplet_loss(triplet_mining_modules):
         return overall_triplet_loss
 
     return batch_triplet_loss
-
-# def batch_triplet_loss(y_true, y_pred):
-#     """Build triplet loss over a batch of embeddings.
-#
-#        custom loss function——a wrapper for calculate_triplet_loss, passed to Keras' compile method;
-#         computes a(n) (aggregated) triplet loss for a batch of embeddings
-#
-#         We calculate triplet losses for all anchor-positive possibilities, and mask for semi-hard cases only.
-#
-#         Args:
-#             y_true: supposed 'labels' of the batch (i.e., class indexes), tensor of size (batch_size,)
-#             y_pred: embeddings, tensor of shape (batch_size, embed_dim)
-#
-#         Returns:
-#             triplet_loss: scalar tensor containing the triplet loss
-#         """
-#     # get shape of y_true tensor
-#     # print(f"Custom_losses:batch_triple_loss: y_true shape: {y_true.shape}, type: {y_true.dtype}")
-#     # print(f"Custom_losses:batch_triple_loss: y_true shape: {y_pred.shape}, type: {y_pred.dtype}")
-#     triplet_loss = calculate_triplet_loss(y_true, y_pred, triplet_mining)
-#     # # Count number of positive err triplets (where triplet_loss > 0)
-#     # valid_triplets = tf.cast(tf.greater(triplet_loss, 1e-16), float)
-#     # num_positive_triplets = tf.reduce_sum(valid_triplets)
-#     #
-#     # # Get final mean triplet loss over the positive valid triplets
-#     # triplet_loss = tf.reduce_sum(triplet_loss) / (num_positive_triplets + 1e-16)
-#
-#
-#     # Get final mean triplet loss
-#     triplet_loss = tf.reduce_mean(triplet_loss)
-#     tf.debugging.assert_scalar(triplet_loss, message="Epoch loss is not a scalar")
-#
-#     return triplet_loss
-
-# possible eval metrics: counting the triplets for which the positive distance (anchor - positive) is less than
-# the negative distance (anchor - negative) (by at least the margin) and then dividing by the total number of
-# triplets in the batch (i.e., proportion of zero loss triplets)
-
-# classification: model embeddings to classify motions (take an unseen motion exemplar (representing one class) and
-# compare it - using L2 normalized Euclidean distance - with its nearest neighbor.
-
-# ranking accuracy:
-# compute L2 normalized distances between all pairs of classes in the embedding space, and generate Spearman
-# rank correlation coefficient (SROCC) between the sorted distances (ascending order) and the complement of the
-# user normalized similarity scores (i.e., 1 - normalized similarity scores).

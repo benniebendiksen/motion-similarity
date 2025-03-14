@@ -1,14 +1,3 @@
-# import tf_keras as keras
-# from keras.callbacks import ModelCheckpoint
-# from keras.layers import Conv2D
-# from keras.layers import BatchNormalization
-# from keras.layers import Dense
-# from keras.layers import MaxPool2D
-# from keras.layers import Dropout
-# from keras.layers import Flatten
-# from keras.optimizers import Adam
-# from keras.models import Sequential
-
 from keras.src.callbacks.model_checkpoint import ModelCheckpoint
 from keras.src.layers import Conv2D
 from keras.src.layers import BatchNormalization
@@ -20,9 +9,7 @@ from keras.src.optimizers import Adam
 from keras.src.models import Sequential
 
 import networks.custom_losses as custom_losses
-from networks.utilities import Utilities
 from keras import callbacks
-# tf.config.experimental_run_functions_eagerly(True)
 import logging
 import os
 import time
@@ -56,11 +43,9 @@ class TrainingLogger(callbacks.Callback):
 
 
 # embedding network and training
-class SimilarityNetwork(Utilities):
+class SimilarityNetwork:
     """
     The SimilarityNetwork class defines our own triplet similarity network.
-
-    This class inherits from the `Utilities` class and is used to build, compile, and train a similarity learning model.
 
     Args:
         train_loader: The data loader for the training dataset.

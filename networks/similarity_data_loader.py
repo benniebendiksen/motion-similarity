@@ -1,10 +1,6 @@
 import keras
 import tensorflow as tf
-import concurrent
-import random
-import os.path
 import numpy as np
-from glob import glob
 
 
 class SimilarityDataLoader(keras.utils.Sequence):

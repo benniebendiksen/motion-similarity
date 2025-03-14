@@ -1,6 +1,3 @@
-import argparse
-import os
-import tensorflow as tf
 from keras import layers
 
 """Define functions to create the triplet loss with online triplet mining."""

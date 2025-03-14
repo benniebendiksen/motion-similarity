@@ -2,7 +2,7 @@ import conf
 from collections import Counter
 from matplotlib import pyplot as plt
 import tensorflow as tf
-from keras.callbacks import CSVLogger
+from keras.api.callbacks import CSVLogger
 import datetime
 import numpy as np
 
