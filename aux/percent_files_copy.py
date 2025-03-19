@@ -1,5 +1,5 @@
 import os
-import conf
+import conf_2
 import random
 import shutil
 

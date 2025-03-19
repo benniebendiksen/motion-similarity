@@ -1,4 +1,4 @@
-import conf
+import conf_2
 from collections import Counter
 from matplotlib import pyplot as plt
 import tensorflow as tf

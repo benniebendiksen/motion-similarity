@@ -1,13 +1,3 @@
-# from keras.src.callbacks.model_checkpoint import ModelCheckpoint
-# from keras.src.layers import Conv2D
-# from keras.src.layers import BatchNormalization
-# from keras.src.layers import Dense
-# from keras.src.layers.pooling.max_pooling2d import MaxPooling2D
-# from keras.src.layers import Dropout
-# from keras.src.layers import Flatten
-# from keras.src.optimizers import Adam
-# from keras.src.models import Sequential
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -148,7 +138,7 @@ class SimilarityNetwork:
     """
 
     def __init__(self, train_loader, validation_loader, test_loader, checkpoint_root_dir, triplet_modules,
-                 architecture_variant, config):
+                 architecture_variant, config, val_triplet_modules=None):
         super().__init__()
         self.config = config
         self.train_loader = train_loader
@@ -156,7 +146,11 @@ class SimilarityNetwork:
         self.test_loader = test_loader
         self.exemplar_dim = train_loader.exemplar_dim
         print(f"SIM NETWORK CLASS: exemplar dim: {self.exemplar_dim}")
-        self.triplet_modules = triplet_modules
+
+        # Store training and validation triplet modules
+        self.train_triplet_modules = triplet_modules
+        self.val_triplet_modules = val_triplet_modules if val_triplet_modules else triplet_modules
+
         self.architecture_variant = architecture_variant
         self.checkpoint_dir = checkpoint_root_dir
         self.embedding_size = self.config.embedding_size
@@ -188,8 +182,23 @@ class SimilarityNetwork:
         # Print model summary
         print(self.network)
 
-        # Setup loss function and optimizer
-        self.criterion = custom_losses.create_batch_triplet_loss(self.triplet_modules)
+        # Create separate loss functions with module information
+        self.train_criterion = custom_losses.create_batch_triplet_loss(
+            self.train_triplet_modules,
+            self.train_loader.module_start_indices,
+            self.train_loader.module_sizes
+        )
+
+        self.val_criterion = custom_losses.create_batch_triplet_loss(
+            self.val_triplet_modules,
+            self.validation_loader.module_start_indices,
+            self.validation_loader.module_sizes
+        )
+
+        # For backward compatibility
+        self.criterion = self.train_criterion
+
+        # Setup optimizer
         self.optimizer = optim.Adam(self.network.parameters(), lr=0.0001, betas=(0.5, 0.999))
 
     def save_checkpoint(self, epoch=None):
@@ -220,7 +229,7 @@ class SimilarityNetwork:
 
     def run_model_training(self):
         """
-        Train the neural network on the training dataset.
+        Train the neural network with separate training and validation phases.
         """
         best_loss = float('inf')
 
@@ -242,9 +251,9 @@ class SimilarityNetwork:
                 # Forward pass
                 outputs = self.network(inputs)
 
-                # Calculate loss
-                loss = self.criterion(labels, outputs)
-                print(f"Batch Loss: {loss.item()}")
+                # Calculate loss using training criterion
+                loss = self.train_criterion(labels, outputs)
+                print(f"Train Batch Loss: {loss.item()}")
 
                 # Backward pass and optimize
                 loss.backward()
@@ -254,7 +263,8 @@ class SimilarityNetwork:
                 batch_count += 1
 
             # Calculate average loss for this epoch
-            epoch_loss = running_loss / batch_count
+            epoch_loss = running_loss / batch_count if batch_count > 0 else 0
+            print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}")
 
             # Validation phase
             self.network.eval()
@@ -267,15 +277,18 @@ class SimilarityNetwork:
                     labels = labels.to(self.device)
 
                     outputs = self.network(inputs)
-                    loss = self.criterion(labels, outputs)
+
+                    # Use validation criterion
+                    loss = self.val_criterion(labels, outputs)
+                    print(f"Val Batch Loss: {loss.item()}")
 
                     val_loss += loss.item()
                     val_batch_count += 1
 
             # Calculate average validation loss
-            val_epoch_loss = val_loss / val_batch_count if val_batch_count > 0 else 0
+            val_epoch_loss = val_loss / val_batch_count
 
-            # Log the epoch results
+            # Log or print the epoch results
             # self.logger.on_epoch_end(epoch, epoch_loss)
             print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
 
@@ -285,7 +298,7 @@ class SimilarityNetwork:
                 self.save_checkpoint(epoch + 1)
 
         # Save final model
-        self.save_checkpoint()
+        # self.save_checkpoint()
 
     def evaluate(self):
         """

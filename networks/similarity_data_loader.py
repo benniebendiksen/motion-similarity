@@ -5,7 +5,7 @@ import numpy as np
 
 
 class SimilarityDataLoader(keras.utils.Sequence):
-    def __init__(self, list_similarity_dicts, config, shuffle=False):
+    def __init__(self, list_similarity_dicts, config, shuffle=False, valid_indices=None):
         """
         self.dict_similarity_exemplars, the data structure that represents our dataset, gets
         structured as: k,v = (dict_idx, class_tuple), tensor (shape: 137, 88) where all tensors are of same shape
@@ -20,12 +20,40 @@ class SimilarityDataLoader(keras.utils.Sequence):
         self.shuffle = shuffle
         self.dict_similarity_exemplars = {}
         self.class_indexes = []
-        # self.class_indexes, _unused_var = zip(
-        #     *[(index + 1, value) for index, value in enumerate(list(list_similarity_dicts[0].keys()))])
+
         self.list_tuples_dict_idx_class_tuple = []
+
+        # Track module sizes and start indices for proper batch slicing
+        self.module_sizes = []
+        self.module_start_indices = []
+
         all_classes_count = 0
+
+        # First calculate module sizes and start indices
+        start_idx = 0
         for i, similarity_dict in enumerate(list_similarity_dicts):
+            # Get appropriate valid indices for this animation
+            curr_valid_indices = None if valid_indices is None else valid_indices[i]
+
+            # Count how many classes will be included from this module
+            module_examples = 0
+            for class_tuple in similarity_dict.keys():
+                if curr_valid_indices is None or class_tuple in curr_valid_indices:
+                    module_examples += 1
+
+            self.module_sizes.append(module_examples)
+            self.module_start_indices.append(start_idx)
+            start_idx += module_examples
+
+        for i, similarity_dict in enumerate(list_similarity_dicts):
+            # Get appropriate valid indices for this animation. A train/val split ensuring mechanism
+            curr_valid_indices = None if valid_indices is None else valid_indices[i]
+
             for _, (class_tuple, value) in enumerate(similarity_dict.items()):
+                # Skip if not in valid indices. A train/val split ensuring mechanism
+                if curr_valid_indices is not None and class_tuple not in curr_valid_indices:
+                    continue
+
                 new_key = (i, class_tuple)
                 self.dict_similarity_exemplars[new_key] = value
                 self.list_tuples_dict_idx_class_tuple.append(new_key)
@@ -35,15 +63,10 @@ class SimilarityDataLoader(keras.utils.Sequence):
         self.num_classes = len(self.class_indexes)
         print(f"SimilarityDataLoader: num classes: {self.num_classes}")
 
-        # self._num_batches = len(self.list_class_tuples) // self.batch_size
-        # if len(self.list_class_tuples) % self.batch_size != 0:
-        #     self._num_batches += 1
+        # batch_size is the number of classes in the dataset subset. There is only one batch per epoch.
         self.batch_size = len(self.dict_similarity_exemplars.keys())
         print(f"SimilarityDataLoader: batch size: {self.batch_size}")
         self._num_batches = 1
-        # self._num_batches = len(self.dict_similarity_exemplars[next(iter(self.dict_similarity_exemplars.keys()))][0])
-        print(f"SimilarityDataLoader: num batches: {self._num_batches}")
-        # self.exemplar_idx = random.randint(0, self.num_batches-1)
         self.exemplar_idx = 0
 
     def unison_shuffling(self):
@@ -90,6 +113,9 @@ class SimilarityDataLoader(keras.utils.Sequence):
     #     return batch_features, tf.constant(self.class_indexes)
 
     def __getitem__(self, index):
+        if index >= self._num_batches:
+            raise StopIteration
+
         # Convert NumPy arrays directly to PyTorch tensors
         batch_features = torch.from_numpy(
             np.array([self.dict_similarity_exemplars[class_tuple][0] for class_tuple in
@@ -103,3 +129,15 @@ class SimilarityDataLoader(keras.utils.Sequence):
         class_labels = torch.tensor(self.class_indexes, dtype=torch.long)
 
         return batch_features, class_labels
+
+    def __iter__(self):
+        self.current_index = 0
+        return self
+
+    def __next__(self):
+        if self.current_index >= self._num_batches:
+            raise StopIteration
+
+        batch = self.__getitem__(self.current_index)
+        self.current_index += 1
+        return batch

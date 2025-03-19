@@ -1,4 +1,4 @@
-import conf
+import conf_2
 from networks.utilities import Utilities
 from keras.optimizers import Adam
 from keras.layers import Input, Conv1D, MaxPooling1D

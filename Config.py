@@ -2,7 +2,6 @@ from enum import Enum
 from typing import Dict, Optional
 import os
 
-
 class Config:
     def __init__(self, task_index: Optional[str] = None):
         # Initialize with task index if running on remote machine
@@ -22,7 +21,7 @@ class Config:
         # Network dimensions
         self.similarity_exemplar_dim = (137, 88)
         self.embedding_size = 32
-        self.n_similarity_epochs = 601
+        self.n_similarity_epochs = 300
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'
@@ -98,17 +97,16 @@ class Config:
                 print(f"Directory confirmed to exist: {directory}")
 
 
-class BatchStrategy(Enum):
-    SEMI_HARD = 1
-    HARD = 2
-    ALL = 3
 
 
 # Initialize configuration
 config = Config()
-
+class BatchStrategy(Enum):
+    SEMI_HARD = 1
+    HARD = 2
+    ALL = 3
 # Batch strategy configuration
-BATCH_STRATEGY = BatchStrategy.HARD
+BATCH_STRATEGY = BatchStrategy.SEMI_HARD
 
 BATCH_SEMI_HARD_PARAMS = {
     "learning_rate": 0.0001,

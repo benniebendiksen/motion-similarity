@@ -1,5 +1,5 @@
 import os
-import conf
+import conf_2
 
 
 def rename_blender_to_unity_files(dir):

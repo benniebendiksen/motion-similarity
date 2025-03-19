@@ -3,7 +3,7 @@ import concurrent
 import os.path
 import numpy as np
 from glob import glob
-import conf
+import conf_2
 
 
 def unison_shuffling(batch_features, batch_labels):

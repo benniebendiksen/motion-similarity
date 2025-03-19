@@ -10,7 +10,7 @@ import pickle
 
 
 class TripletMining:
-    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config):
+    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None):
         self.config = config
         self.dict_similarity_classes_exemplars = {}
         self.matrix_alpha_left_right_right_left = None
@@ -32,8 +32,12 @@ class TripletMining:
         self.bool_fixed_neutral_embedding = bool_fixed
         self.squared_left_right_euc_dist = squared_left_right
         self.squared_class_neut_dist = squared_class_neut
-        self.batch_size = self.config.similarity_per_anim_class_num
-        print(f"TripletMining: batch size: {self.batch_size}")
+
+        # Store valid indices for filtering. A train/test split mechanism
+        self.valid_indices = valid_indices
+        if valid_indices is not None:
+            self.batch_size = self.config.similarity_per_anim_class_num
+
         self.initialize_triplet_mining(anim_name)
 
     def initialize_triplet_mining(self, anim_name):
@@ -78,15 +82,6 @@ class TripletMining:
             torch.zeros((self.num_states_drives, self.num_states_drives), dtype=torch.float32, requires_grad=False)
             for _ in range(9)
         ]
-
-
-        # (self.matrix_alpha_left_right_right_left, self.matrix_alpha_left_neut_neut_left,
-        #  self.matrix_alpha_right_neut_neut_right,
-        #  self.matrix_bool_left_right, self.matrix_bool_right_left, self.matrix_bool_left_neut,
-        #  self.matrix_bool_neut_left,
-        #  self.matrix_bool_right_neut, self.matrix_bool_neut_right) = [tf.Variable(
-        #     initial_value=tf.zeros((self.num_states_drives, self.num_states_drives), dtype=tf.float32)) for _ in range(9)]
-
 
         self.tensor_dists_class_neut = tf.Variable(initial_value=tf.zeros((self.num_states_drives,)))
         self.neutral_embedding = tf.Variable(initial_value=tf.zeros((self.config.embedding_size,)))
@@ -183,75 +178,6 @@ class TripletMining:
 
         return distances
 
-    # def calculate_left_right_distances(self, embeddings):
-    #     """Compute the 2D matrix of distances between all 56 class embeddings.
-    #
-    #     Args:
-    #         embeddings: tensor of shape (batch_size, embed_dim)
-    #         squared: Boolean. If true, output is the pairwise squared euclidean distance matrix.
-    #                  If false, output is the pairwise euclidean distance matrix.
-    #
-    #     Returns:
-    #         pairwise_distances: tensor of shape (batch_size, batch_size)
-    #     """
-    #
-    #     # print(f"calculate_left_right_distances bool: {self.squared_left_right_euc_dist}")
-    #     if self.bool_fixed_neutral_embedding:
-    #         _neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
-    #     else:
-    #         _neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
-    #
-    #     # shape (batch_size, batch_size)
-    #     dot_product = tf.matmul(modified_embeddings, tf.transpose(modified_embeddings))
-    #     # print(f"calculate_left_right_distances(): dot_product shape: {dot_product.shape}")
-    #
-    #     # Get squared L2 norm for each embedding (each embedding's dot product with itself
-    #     # shape (batch_size,)
-    #     square_norm = tf.linalg.diag_part(dot_product)
-    #
-    #     # Compute the pairwise squared euclidean distance matrix:
-    #     # ||a - b||^2 = ||a||^2  - 2 <a, b> + ||b||^2
-    #     # shape (batch_size-1, batch_size-1)
-    #     distances = tf.expand_dims(square_norm, 1) - 2.0 * dot_product + tf.expand_dims(square_norm, 0)
-    #
-    #     # Because of computation errors, some distances might be negative, so we put everything >= 0.0 (see unit test)
-    #     distances = tf.maximum(distances, 0.0)
-    #
-    #     if not self.squared_left_right_euc_dist:
-    #         # Compute pairwise Euclidean distances directly
-    #         # shape (batch_size, batch_size)
-    #
-    #         # distances = tf.norm(
-    #         #     tf.expand_dims(modified_embeddings, axis=1) - tf.expand_dims(modified_embeddings, axis=0),
-    #         #     axis=-1
-    #         # )
-    #         # The gradient of sqrt is infinite when x == 0.0 (eg: on the diagonal)
-    #         # we need to add a small epsilon where distances == 0.0
-    #         mask = tf.cast(tf.equal(distances, 0.0), float)
-    #         distances = distances + mask * 1e-16
-    #
-    #         distances = tf.clip_by_value(distances, 1e-16, tf.reduce_max(distances))
-    #
-    #         distances = tf.sqrt(distances)
-    #
-    #         # Correct the epsilon added: set the distances of the mask to be exactly 0.0
-    #         distances = distances * (1.0 - mask)
-    #
-    #         tf.debugging.check_numerics(distances, "NaN or Inf values found in distances")
-    #
-    #         # tf.debugging.assert_shapes([(tf.shape(distances), (tf.TensorShape([conf.similarity_batch_size,
-    #         #                                                                    conf.similarity_batch_size]),))])
-    #
-    #     # if not conf.bool_fixed_neutral_embedding:
-    #     #     tf.debugging.assert_shapes([(tf.shape(distances), (tf.TensorShape([conf.similarity_batch_size - 1,
-    #     #                                                                        conf.similarity_batch_size - 1]),))])
-    #     # else:
-    #     #     tf.debugging.assert_shapes([(tf.shape(distances), (tf.TensorShape([conf.similarity_batch_size,
-    #     #                                                                        conf.similarity_batch_size]),))])
-    #     return distances
-
-    import torch
-
     def calculate_class_neut_distances(self, embeddings):
         """
         Calculate 1D tensor of either squared L2 norm or L2 norm of differences
@@ -273,53 +199,9 @@ class TripletMining:
             # Euclidean distance
             self.tensor_dists_class_neut = torch.norm(differences, p=2, dim=1)
 
-
-    # def calculate_class_neut_distances(self, embeddings):
-    #     """
-    #     Calculate 1D tensor of either squared L2 norm, or L2 norm, of differences between class embeddings and the
-    #     neutral embedding.
-    #
-    #     Args:
-    #         embeddings: Tensor of shape (batch_size, embed_dim)
-    #         squared: Boolean. If true, calculate squared L2 norm; if false, calculate L2 norm.
-    #
-    #     Returns:
-    #         None
-    #     """
-    #     # print(f"triplet_mining:calculate_class_neut_distances() bool: {self.squared_class_neut_dist}")
-    #     if self.bool_fixed_neutral_embedding:
-    #         neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
-    #     else:
-    #         neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
-    #     if self.squared_class_neut_dist:
-    #         # Compute squared Euclidean distance between each class embedding and the neutral embedding
-    #         self.tensor_dists_class_neut.assign(tf.reduce_sum(tf.square(modified_embeddings - neutral_embedding), axis=1))
-    #         # self.tensor_dists_class_neut.assign(tf.square(tf.norm(modified_embeddings - neutral_embedding, ord="euclidean", axis=1)))
-    #     else:
-    #         # Compute Euclidean distance between each class embedding and the neutral embedding
-    #         self.tensor_dists_class_neut.assign(tf.norm(modified_embeddings - neutral_embedding, ord="euclidean", axis=1))
-    #
-    #         # distances = modified_embeddings - neutral_embedding
-    #         # squared_dists = tf.reduce_sum(tf.square(distances), axis=1)
-    #         #
-    #         # mask = tf.cast(tf.equal(squared_dists, 0.0), float)
-    #         # squared_dists = squared_dists + mask * 1e-16
-    #         # squared_dists = tf.clip_by_value(squared_dists, 1e-16, tf.reduce_max(squared_dists))
-    #         # distances = tf.sqrt(squared_dists)
-    #         # distances = distances * (1.0 - mask)
-    #         #
-    #         # tensor_dists_class_neut.assign(distances)
-    #
-    #         # squared_dists = tf.reduce_sum(tf.square(modified_embeddings - neutral_embedding), axis=1)
-    #         # euclidean_dists = tf.sqrt(squared_dists)
-    #         # tensor_dists_class_neut.assign(euclidean_dists)
-    #
-    #     # print(
-    #     #     f"triplet_mining:calculate_class_neut_distances(), tensor_dists_class_neut shape: {tf.shape(self.tensor_dists_class_neut)}")
-
     def pre_process_comparisons_data(self, anim_name):
         """
-        Preprocess user comparison data and populate alpha matrices and masks based on the data.
+        Preprocess user comparison data and populate alpha matrices and masks based on the data. Filters based on valid indices.
 
         Args:
             anim_name: str: name of the animation (e.g., "walking", "pointing", "picking")
@@ -331,7 +213,7 @@ class TripletMining:
         def verify_comparison_data():
             # Check that the Dataframe has no repeated efforts_tuples values
             seen_tuples = set()
-            for index, row in self.df_comparisons.iterrows():
+            for index, row in df_comparisons.iterrows():
                 hashable_list = tuple(row['efforts_tuples'])
                 # Check if the hashable list is already in the set
                 if hashable_list in seen_tuples:
@@ -350,7 +232,7 @@ class TripletMining:
         def _generate_df_alphas():
             """
             generate alpha_dataframes where each row is a comparison between two similarity classes (and the neutral) and
-            contains the corresponding two out of six alpha values (each comparison has two alpha values, one for each
+            contains the corresponding two out of six possible alpha values (each comparison has two alpha values, one for each
             of the positives.
 
             df_comparisons: DataFrame: contains the user comparison data:
@@ -366,12 +248,12 @@ class TripletMining:
             comparisons_list = []
             selection_values = [0, 1, 2]
             # Initialize new columns for pairwise comparison alpha values (two values created per pairwise comparison)
-            df_comparisons['alpha_0_2'] = 0
-            df_comparisons['alpha_2_0'] = 0
-            df_comparisons['alpha_0_1'] = 0
-            df_comparisons['alpha_2_1'] = 0
-            df_comparisons['alpha_1_0'] = 0
-            df_comparisons['alpha_1_2'] = 0
+            df_comparisons['alpha_0_2'] = 0.0
+            df_comparisons['alpha_2_0'] = 0.0
+            df_comparisons['alpha_0_1'] = 0.0
+            df_comparisons['alpha_2_1'] = 0.0
+            df_comparisons['alpha_1_0'] = 0.0
+            df_comparisons['alpha_1_2'] = 0.0
             # Iterate over three consecutive rows
             # selected_0 is either 0 (agent left) or 1 (neutral) and selected_1 is either 1 or 2 (agent right) (else we terminate)
             for i in range(0, len(df_comparisons), 3):
@@ -459,218 +341,11 @@ class TripletMining:
             # print(f'{alpha_dataframes=}')
             return alpha_dataframes
 
-        # def _populate_alpha_matrices_and_masks(df_alphas):
-        #     """
-        #     Populate the alpha matrices and masks based on the data in the comparisons DataFrame.
-        #
-        #     Args:
-        #        None
-        #
-        #    Returns:
-        #        None
-        #     """
-        #     # Iterate over the rows of the comparisons DataFrame
-        #     counter_df_alphas_rows = 0
-        #     repeat_class_comparison_counter = 0
-        #     equal_comparison_counter = 0
-        #     zero_alphas_counter = 0
-        #     unequal_comparison_counter = 0
-        #     bool_swap_left_right = False
-        #     # write out df_alphas to csv
-        #     df_alphas.to_csv('py_df_alphas_walking.csv')
-        #     for index, row in df_alphas.iterrows():
-        #         counter_df_alphas_rows += 1
-        #         # print(f"df_alphas_rows: {index}")
-        #         efforts_tuple = row['efforts_tuples']
-        #         # enforce constraint that i < j always corresponds to left, right / i > j to right, left effort_tuples.
-        #         # where labels are efforts_tuple values (efforts_tuple[0] < efforts_tuple[1] based on R's
-        #         # pmin, pmax functions) and i and j are indices to dict_similarity_classes_exemplars.keys()
-        #         if dict_label_to_id[efforts_tuple[0]] > dict_label_to_id[efforts_tuple[1]]:
-        #             row['efforts_tuples'] = [efforts_tuple[1], efforts_tuple[0]]
-        #             bool_swap_left_right = True
-        #         efforts_left = row['efforts_tuples'][0]
-        #         efforts_right = row['efforts_tuples'][1]
-        #         index_left = dict_label_to_id[efforts_left]
-        #         index_right = dict_label_to_id[efforts_right]
-        #
-        #         ### temporary fix for erroneous similarity class, and for self to self comparison, in comparisons
-        #         ### DataFrame
-        #         if efforts_left == (0, 0, 0, 0) or efforts_left == efforts_right:
-        #             repeat_class_comparison_counter += 1
-        #             print(f"repeat class comparison at indices: {index_left} , {index_right}")
-        #             continue
-        #         # alpha_tripletid1_tripletid2 denotes one of the two alpha values per triplet as a function of the two most similar cases.
-        #         # For any comparison, left_index < right_index
-        #         # left, right indices indicate location for left, neut anchor_positive alpha with respect to Left,
-        #         # Neutral Matrix (and right, neut anchor_positive alpha with respect to Right, Neutral Matrix)
-        #         # whereas right, left indices indicate location for neut, left anchor_positive alpha and neut,
-        #         # right anchor_positive alpha, respectively.
-        #         if row['alpha_0_2'] != 0:
-        #             # print(f"entered alpha_0_2 with alphas: {row['alpha_0_2']} and {row['alpha_2_0']}")
-        #             # extract the two alpha values for the comparison, abiding by constraint
-        #             left_right_alpha = row['alpha_0_2']
-        #             right_left_alpha = row['alpha_2_0']
-        #             if bool_swap_left_right:
-        #                 left_right_alpha = row['alpha_2_0']
-        #                 right_left_alpha = row['alpha_0_2']
-        #             if left_right_alpha == 0 and right_left_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 # print(f"left_right_alpha, right_left_alpha, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_left_right = 0
-        #                 bool_constant_right_left = 0
-        #             elif left_right_alpha == 0:
-        #                 # print(f"left_right_alpha: {right_left_alpha}")
-        #                 bool_constant_left_right = 0
-        #                 bool_constant_right_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif right_left_alpha == 0:
-        #                 # print(f"right_left_alpha: {right_left_alpha}")
-        #                 bool_constant_left_right = 1
-        #                 bool_constant_right_left = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # assert False, "left_right_alpha and right_left_alpha are both non-zero"
-        #                 bool_constant_left_right = 1
-        #                 bool_constant_right_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #
-        #             self.matrix_alpha_left_right_right_left.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_left_right_right_left,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([left_right_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_left_right.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_left_right,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([bool_constant_left_right], dtype=tf.float32)
-        #             ))
-        #             self.matrix_alpha_left_right_right_left.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_left_right_right_left,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([right_left_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_right_left.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_right_left,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([bool_constant_right_left], dtype=tf.float32)
-        #             ))
-        #         elif row['alpha_0_1'] != 0:
-        #             # print(f"entered alpha_0_1 with alphas: {row['alpha_0_1']} and {row['alpha_1_0']}")
-        #             left_neutral_alpha = row['alpha_0_1']
-        #             neutral_left_alpha = row['alpha_1_0']
-        #             if bool_swap_left_right:
-        #                 # left_neutral_alpha = row['alpha_2_1']
-        #                 # neutral_left_alpha = row['alpha_1_2']
-        #                 left_neutral_alpha = row['alpha_1_0']
-        #                 neutral_left_alpha = row['alpha_0_1']
-        #             if left_neutral_alpha == 0 and neutral_left_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 # print(f"left_neut, neut_left, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_left_neutral = 0
-        #                 bool_constant_neutral_left = 0
-        #             elif left_neutral_alpha == 0:
-        #                 # print(f"left_neutral_alpha: {neutral_left_alpha}")
-        #                 bool_constant_left_neutral = 0
-        #                 bool_constant_neutral_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif neutral_left_alpha == 0:
-        #                 # print(f"neutral_left_alpha: {neutral_left_alpha}")
-        #                 bool_constant_left_neutral = 1
-        #                 bool_constant_neutral_left = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # assert False, "left_neutral_alpha and neutral_left_alpha are both non-zero"
-        #                 bool_constant_left_neutral = 1
-        #                 bool_constant_neutral_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             self.matrix_alpha_left_neut_neut_left.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_left_neut_neut_left,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([left_neutral_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_left_neut.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_left_neut,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([bool_constant_left_neutral], dtype=tf.float32)
-        #             ))
-        #             self.matrix_alpha_left_neut_neut_left.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_left_neut_neut_left,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([neutral_left_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_neut_left.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_neut_left,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([bool_constant_neutral_left], dtype=tf.float32)
-        #             ))
-        #         elif row['alpha_2_1'] != 0:
-        #             # print(f"entered alpha_2_1 with alphas: {row['alpha_2_1']} and {row['alpha_1_2']}")
-        #             right_neutral_alpha = row['alpha_2_1']
-        #             neutral_right_alpha = row['alpha_1_2']
-        #             if bool_swap_left_right:
-        #                 # right_neutral_alpha = row['alpha_0_1']
-        #                 # neutral_right_alpha = row['alpha_1_0']
-        #                 right_neutral_alpha = row['alpha_1_2']
-        #                 neutral_right_alpha = row['alpha_2_1']
-        #             if right_neutral_alpha == 0 and neutral_right_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 # print(f"right_neut, neut_right, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_right_neutral = 0
-        #                 bool_constant_neutral_right = 0
-        #             elif right_neutral_alpha == 0:
-        #                 # print(f"right_neutral_alpha: {neutral_right_alpha}")
-        #                 bool_constant_right_neutral = 0
-        #                 bool_constant_neutral_right = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif neutral_right_alpha == 0:
-        #                 # print(f"neutral_right_alpha: {neutral_right_alpha}")
-        #                 bool_constant_right_neutral = 1
-        #                 bool_constant_neutral_right = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # assert False, "right_neutral_alpha and neutral_right_alpha are both non-zero"
-        #                 bool_constant_right_neutral = 1
-        #                 bool_constant_neutral_right = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             self.matrix_alpha_right_neut_neut_right.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_right_neut_neut_right,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([right_neutral_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_right_neut.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_right_neut,
-        #                 indices=tf.constant([[index_left, index_right]]),
-        #                 updates=tf.constant([bool_constant_right_neutral], dtype=tf.float32)
-        #             ))
-        #             self.matrix_alpha_right_neut_neut_right.assign(tf.tensor_scatter_nd_add(
-        #                 self.matrix_alpha_right_neut_neut_right,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([neutral_right_alpha], dtype=tf.float32)
-        #             ))
-        #             self.matrix_bool_neut_right.assign(tf.tensor_scatter_nd_update(
-        #                 self.matrix_bool_neut_right,
-        #                 indices=tf.constant([[index_right, index_left]]),
-        #                 updates=tf.constant([bool_constant_neutral_right], dtype=tf.float32)
-        #             ))
-        #         # implies equal selection (or no selection) across all three pairs of a triplet
-        #         else:
-        #             equal_comparison_counter += 1
-        #         bool_swap_left_right = False
-        #     print(f" Equal comparison counter: {equal_comparison_counter}")
-        #     print(f"Unequal comparison counter: {unequal_comparison_counter}")
-
         def _populate_alpha_matrices_and_masks(df_alphas):
             """
-            Populate the alpha matrices and masks based on the data in the comparisons DataFrame.
+            Populate the alpha matrices and their corresponding masks based on the data in the comparisons DataFrame.
+            Masks indicate if positive pairs (and therefore the two corresponding triplets / alphas) are to be used for loss calculation.
+            Valid indices are used to set zeros in the alpha matrices and masks for classes that are not part of the training or validation set.
 
             PyTorch version of the original TensorFlow implementation.
 
@@ -693,8 +368,16 @@ class TripletMining:
 
             for index, row in df_alphas.iterrows():
                 counter_df_alphas_rows += 1
-                # print(f"df_alphas_rows: {index}")
                 efforts_tuple = row['efforts_tuples']
+
+                # check that effort tuples correspond to values of self.valid_indices
+                # print(f"efforts_tuple: {efforts_tuple[0]}, {efforts_tuple[1]}")
+                # print(f"valid_indices: {self.valid_indices}")
+
+                # Skip if either class is not in valid_indices. A train/val split ensuring mechanism
+                if self.valid_indices is not None:
+                    if efforts_tuple[0] not in self.valid_indices or efforts_tuple[1] not in self.valid_indices:
+                        continue
 
                 # enforce constraint that i < j always corresponds to left, right / i > j to right, left effort_tuples.
                 # where labels are efforts_tuple values (efforts_tuple[0] < efforts_tuple[1] based on R's
@@ -859,6 +542,7 @@ class TripletMining:
         aux_folder_path = (Path(__file__) / '../../aux').resolve()
         csv_similarity_ratios_path = aux_folder_path / f'{anim_name}_similarity_comparisons_ratios.csv'
         df_comparisons = pd.read_csv(csv_similarity_ratios_path)
+        print(f"Shape of df_comparisons: {df_comparisons.shape}")
         # Split the efforts_tuples values at the delimiter '_' and convert tokens to tuples
         df_comparisons['efforts_tuples'] = df_comparisons['efforts_tuples'].apply(
             lambda x: [tuple(ast.literal_eval(token)) for token in x.split('_')])

@@ -7,6 +7,7 @@ execution as a remote machine run. Otherwise, the program is assumed to be runni
 
 import os
 import sys
+import random
 curr_path = os.getcwd()
 sys.path.append(curr_path)
 sys.path.append(curr_path + '\networks')
@@ -38,6 +39,43 @@ def check_gpu_access():
         print(f"✅ GPU computation successful: {c.numpy()}")
     else:
         print("❌ No GPU detected by TensorFlow.")
+
+
+def create_train_val_split(similarity_dicts, val_ratio=0.2):
+    """
+    Create training and validation indices for each animation type.
+
+    Args:
+        similarity_dicts: List of dictionaries containing class exemplars for each animation
+        val_ratio: Ratio of classes to use for validation
+
+    Returns:
+        train_indices: List of sets containing training class indices for each animation
+        val_indices: List of sets containing validation class indices for each animation
+    """
+    train_indices = []
+    val_indices = []
+
+    for anim_dict in similarity_dicts:
+        # Get keys except neutral
+        keys = [k for k in anim_dict.keys() if k != (0, 0, 0, 0)]
+
+        # Determine validation set size
+        val_size = max(1, int(len(keys) * val_ratio))
+
+        # Randomly sample keys for validation
+        val_keys = set(random.sample(keys, val_size))
+        train_keys = set(k for k in keys if k not in val_keys)
+
+        # Add neutral exemplar to both sets
+        if (0, 0, 0, 0) in anim_dict:
+            train_keys.add((0, 0, 0, 0))
+            val_keys.add((0, 0, 0, 0))
+
+        train_indices.append(train_keys)
+        val_indices.append(val_keys)
+
+    return train_indices, val_indices
 
 
 if __name__ == '__main__':
@@ -75,31 +113,89 @@ if __name__ == '__main__':
     squared_left_right_euc_dist = True
     squared_class_neut_euc_dist = False
 
-    # load similarity data and train similarity network
-    walking_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "walking", config)
-    pointing_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)
-    picking_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "picking", config)
-    list_similarity_dicts = [walking_similarity_dict_partition["train"], pointing_similarity_dict_partition["train"],
-                             picking_similarity_dict_partition["train"]]
+    # # load similarity data and train similarity network
+    # walking_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "walking", config)
+    # pointing_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)
+    # picking_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, "picking", config)
+    # list_similarity_dicts = [walking_similarity_dict_partition["train"], pointing_similarity_dict_partition["train"],
+    #                          picking_similarity_dict_partition["train"]]
+    # list_similarity_dicts = osd.balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts)
+    #
+    # similarity_train_loader = SimilarityDataLoader(list_similarity_dicts, config, True)
+    #
+    # walking_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "walking", config)
+    # pointing_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "pointing", config)
+    # picking_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "picking", config)
+
+    # similarity_network = SimilarityNetwork(train_loader=similarity_train_loader,
+    #                                        validation_loader=similarity_train_loader,
+    #                                        test_loader=similarity_train_loader,
+    #                                        checkpoint_root_dir=config.checkpoint_root_dir,
+    #                                        triplet_modules=[walking_triplet_mining, pointing_triplet_mining,
+    #                                                         picking_triplet_mining],
+    #                                        architecture_variant=arch_variant,
+    #                                        config=config)
+
+    # Load similarity data
+    walking_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "walking", config)["train"]
+    pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
+    picking_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "picking", config)["train"]
+
+    list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict, picking_similarity_dict]
     list_similarity_dicts = osd.balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts)
-    walking_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "walking", config)
-    pointing_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "pointing", config)
-    picking_triplet_mining = TripletMining(bool_drop_neutral_exemplar, bool_fixed_neutral_embedding, squared_left_right_euc_dist, squared_class_neut_euc_dist, "picking", config)
 
-    # similarity_train_loader = SimilarityDataLoader(walking_similarity_dict_partition['train'])
-    # similarity_validation_loader = SimilarityDataLoader(walking_similarity_dict_partition['validation'])
-    # similarity_test_loader = SimilarityDataLoader(walking_similarity_dict_partition['test'])
+    # Create train/val split
+    train_indices, val_indices = create_train_val_split(list_similarity_dicts)
 
-    similarity_train_loader = SimilarityDataLoader(list_similarity_dicts, config, True)
+    # Create data loaders
+    train_loader = SimilarityDataLoader(list_similarity_dicts, config, True, train_indices)
+    val_loader = SimilarityDataLoader(list_similarity_dicts, config, False, val_indices)
 
-    similarity_network = SimilarityNetwork(train_loader=similarity_train_loader,
-                                           validation_loader=similarity_train_loader,
-                                           test_loader=similarity_train_loader,
-                                           checkpoint_root_dir=config.checkpoint_root_dir,
-                                           triplet_modules=[walking_triplet_mining, pointing_triplet_mining,
-                                                            picking_triplet_mining],
-                                           architecture_variant=arch_variant,
-                                           config=config)
+    # Create training triplet modules with validation filtering
+    walking_train_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "walking", config, valid_indices=train_indices[0]
+    )
+    pointing_train_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "pointing", config, valid_indices=train_indices[1]
+    )
+    picking_train_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "picking", config, valid_indices=train_indices[2]
+    )
+
+    # Create validation triplet modules
+    walking_val_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "walking", config, valid_indices=val_indices[0]
+    )
+    pointing_val_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "pointing", config, valid_indices=val_indices[1]
+    )
+    picking_val_triplet = TripletMining(
+        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+        squared_left_right_euc_dist, squared_class_neut_euc_dist,
+        "picking", config, valid_indices=val_indices[2]
+    )
+
+    similarity_network = SimilarityNetwork(
+        train_loader=train_loader,
+        validation_loader=val_loader,
+        test_loader=val_loader,
+        checkpoint_root_dir=config.checkpoint_root_dir,
+        triplet_modules=[walking_train_triplet, pointing_train_triplet, picking_train_triplet],
+        val_triplet_modules=[walking_val_triplet, pointing_val_triplet, picking_val_triplet],
+        architecture_variant=arch_variant,
+        config=config
+    )
+
     similarity_network.run_model_training()
 
     # similarity_network.evaluate()
