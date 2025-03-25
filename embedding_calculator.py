@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import tensorflow as tf
+import torch
 import pickle
 from pathlib import Path
 
@@ -28,9 +29,39 @@ def create_triplet_modules(list_anim_names, bool_drop_neutral_exemplar, bool_fix
     return list_triplet_modules
 
 
+# def load_model(checkpoint_path, architecture_variant, config, data_loader, triplet_modules):
+#     """
+#     Load a trained similarity network model for generating embeddings.
+#
+#     Args:
+#         checkpoint_path: Path to the saved model weights
+#         architecture_variant: Architecture variant number
+#         config: Configuration object
+#
+#     Returns:
+#         Loaded network model
+#     """
+#
+#     # Create and load the similarity network
+#     similarity_network = SimilarityNetwork(
+#         train_loader=data_loader,
+#         validation_loader=data_loader,
+#         test_loader=data_loader,
+#         checkpoint_root_dir=config.checkpoint_root_dir,
+#         triplet_modules=triplet_modules,
+#         architecture_variant=architecture_variant,
+#         config=config
+#     )
+#
+#     # Load the trained weights
+#     similarity_network.network.load_weights(checkpoint_path)
+#     print(f"Loaded model weights from {checkpoint_path}")
+#
+#     return similarity_network.network
+
 def load_model(checkpoint_path, architecture_variant, config, data_loader, triplet_modules):
     """
-    Load a trained similarity network model for generating embeddings.
+    Load a trained similarity network model from a .pt file.
 
     Args:
         checkpoint_path: Path to the saved model weights
@@ -52,21 +83,68 @@ def load_model(checkpoint_path, architecture_variant, config, data_loader, tripl
         config=config
     )
 
-    # Load the trained weights
-    similarity_network.network.load_weights(checkpoint_path)
+    # Load only the model state dict and not the optimizer state dict
+    checkpoint = torch.load(checkpoint_path, weights_only=True)
+    similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
+    similarity_network.network.eval()
     print(f"Loaded model weights from {checkpoint_path}")
 
     return similarity_network.network
 
 
+# def generate_embeddings_from_dataloader(model, data_loader, list_similarity_dicts):
+#     """
+#     Generate embeddings for all samples in a data dictionary using a dataloader.
+#
+#     Args:
+#         model: Loaded network model
+#         data_dict: Dictionary of similarity data
+#         config: Configuration object
+#
+#     Returns:
+#         Dictionary mapping (key, idx) to embedding vectors
+#     """
+#     print("Generating embeddings using dataloader...")
+#
+#     # Get the mapping between batch indices and keys
+#     embedding_keys = []
+#
+#     # Create dictionary idx, class_key tuples to identify any given exemplar by its action and effort tuple
+#     # i = 0 -> walking, i = 1 -> pointing, i = 2 -> picking
+#     for i, similarity_dict in enumerate(list_similarity_dicts):
+#         for _, (class_tuple, value) in enumerate(similarity_dict.items()):
+#             new_key = (i, class_tuple)
+#             embedding_keys.append(new_key)
+#
+#     # Get batch features from dataloader
+#     batch_features, batch_labels = data_loader[0]  # Get the first (and only) batch
+#
+#     # Make sure the batch features have the right shape
+#     if len(batch_features.shape) == 3:
+#         print(f"data loader returned batch features of 3 dimensions, expanding to 4")
+#         # Add channel dimension if it's missing
+#         batch_features = tf.expand_dims(batch_features, -1)
+#
+#     # Generate embeddings for the entire batch at once
+#     print(f"Generating embeddings for batch of shape {batch_features.shape}...")
+#     batch_embeddings = model.predict(batch_features, verbose=1)
+#
+#     # Map the embeddings back to their keys
+#     embeddings = {}
+#     for i, embedding in enumerate(batch_embeddings):
+#         embeddings[embedding_keys[i]] = embedding
+#
+#     print(f"Generated {len(embeddings)} embeddings")
+#     return embeddings
+
 def generate_embeddings_from_dataloader(model, data_loader, list_similarity_dicts):
     """
-    Generate embeddings for all samples in a data dictionary using a dataloader.
+    Generate embeddings using a PyTorch model and DataLoader.
 
     Args:
-        model: Loaded network model
-        data_dict: Dictionary of similarity data
-        config: Configuration object
+        model: Loaded PyTorch model
+        data_loader: DataLoader object
+        list_similarity_dicts: List of similarity dictionaries
 
     Returns:
         Dictionary mapping (key, idx) to embedding vectors
@@ -75,31 +153,28 @@ def generate_embeddings_from_dataloader(model, data_loader, list_similarity_dict
 
     # Get the mapping between batch indices and keys
     embedding_keys = []
+    idx_to_action = {0: "walking", 1: "pointing", 2: "picking"}
 
-    # Create dictionary idx, class_key tuples to identify any given exemplar by its action and effort tuple
-    # i = 0 -> walking, i = 1 -> pointing, i = 2 -> picking
     for i, similarity_dict in enumerate(list_similarity_dicts):
-        for _, (class_tuple, value) in enumerate(similarity_dict.items()):
-            new_key = (i, class_tuple)
+        for (class_tuple, _value) in similarity_dict.items():
+            new_key = (idx_to_action[i], class_tuple)
             embedding_keys.append(new_key)
 
-    # Get batch features from dataloader
-    batch_features, batch_labels = data_loader[0]  # Get the first (and only) batch
-
-    # Make sure the batch features have the right shape
-    if len(batch_features.shape) == 3:
-        print(f"data loader returned batch features of 3 dimensions, expanding to 4")
-        # Add channel dimension if it's missing
-        batch_features = tf.expand_dims(batch_features, -1)
-
-    # Generate embeddings for the entire batch at once
-    print(f"Generating embeddings for batch of shape {batch_features.shape}...")
-    batch_embeddings = model.predict(batch_features, verbose=1)
-
-    # Map the embeddings back to their keys
+    # Process the data through the model
+    model.eval()
     embeddings = {}
-    for i, embedding in enumerate(batch_embeddings):
-        embeddings[embedding_keys[i]] = embedding
+
+    with torch.no_grad():
+        for batch_features, _ in data_loader:
+            if len(batch_features.shape) == 3:
+                print(f"Data loader returned batch features of 3 dimensions, expanding to 4")
+                batch_features = batch_features.unsqueeze(-1)
+
+            batch_features = batch_features.to(torch.float32)
+            batch_embeddings = model(batch_features).cpu().numpy()
+
+            for i, embedding in enumerate(batch_embeddings):
+                embeddings[embedding_keys[i]] = embedding
 
     print(f"Generated {len(embeddings)} embeddings")
     return embeddings
@@ -144,9 +219,11 @@ def main():
     config = Config()
 
     # Set up paths and model parameters
-    architecture_variant = 0  # Change to match your model
+    architecture_variant = 0
+    #checkpoint_path = os.path.join(config.checkpoint_root_dir,
+     #                              f"{architecture_variant}_similarity_model_weights.weights.h5")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights.weights.h5")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_074.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False
