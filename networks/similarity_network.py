@@ -242,6 +242,7 @@ class SimilarityNetwork:
             batch_count = 0
 
             for inputs, labels in self.train_loader:
+                print(f"Train batch size: {inputs.shape[0]}")
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
 
@@ -273,6 +274,7 @@ class SimilarityNetwork:
 
             with torch.no_grad():
                 for inputs, labels in self.validation_loader:
+                    print(f"Validation batch size: {inputs.shape[0]}")
                     inputs = inputs.to(self.device)
                     labels = labels.to(self.device)
 

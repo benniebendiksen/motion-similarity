@@ -35,7 +35,13 @@ class TripletMining:
 
         # Store valid indices for filtering. A train/test split mechanism
         self.valid_indices = valid_indices
-        if valid_indices is not None:
+
+        # Initialize with proper batch_size for this module
+        if self.valid_indices is not None:
+            # For validation/training split
+            self.batch_size = len(self.valid_indices)
+        else:
+            # Use the full batch size
             self.batch_size = self.config.similarity_per_anim_class_num
 
         self.initialize_triplet_mining(anim_name)
@@ -54,22 +60,78 @@ class TripletMining:
         """
 
         print("Initializing Triplet Mining module state variables")
+        # self.dict_similarity_classes_exemplars = pickle.load(open(
+        #     self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
+        # print(f"classes: {self.dict_similarity_classes_exemplars.keys()}")
+        #
+        # key_to_remove = (0, 0, 0, 0)
+        # if key_to_remove not in self.dict_similarity_classes_exemplars:
+        #     assert False, f"triplet_mining.py: Key '{key_to_remove}' not found in dict_similarity_classes_exemplars"
+        # if self.bool_drop_neutral_exemplar:
+        #     _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
+        #     print(f"Removed key '{key_to_remove}' from dict_similarity_classes_exemplars")
+        #     self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
+        # else:
+        #     self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
+        # print(f"triplet_mining:init: loaded: {self.num_states_drives} states + drives")
+        #
+        # # Initialize matrices as PyTorch tensors
+        # (self.matrix_alpha_left_right_right_left,
+        #  self.matrix_alpha_left_neut_neut_left,
+        #  self.matrix_alpha_right_neut_neut_right,
+        #  self.matrix_bool_left_right,
+        #  self.matrix_bool_right_left,
+        #  self.matrix_bool_left_neut,
+        #  self.matrix_bool_neut_left,
+        #  self.matrix_bool_right_neut,
+        #  self.matrix_bool_neut_right) = [
+        #     torch.zeros((self.num_states_drives, self.num_states_drives), dtype=torch.float32, requires_grad=False)
+        #     for _ in range(9)
+        # ]
+        #
+        # self.tensor_dists_class_neut = tf.Variable(initial_value=tf.zeros((self.num_states_drives,)))
+        # self.neutral_embedding = tf.Variable(initial_value=tf.zeros((self.config.embedding_size,)))
+        # self.subset_global_dict()
+        # self.pre_process_comparisons_data(anim_name)
+
+
+        # Load the full dictionary
         self.dict_similarity_classes_exemplars = pickle.load(open(
             self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
-        print(f"classes: {self.dict_similarity_classes_exemplars.keys()}")
+        print(f"Full dictionary classes: {len(self.dict_similarity_classes_exemplars.keys())}")
 
+        # If valid_indices is provided, subset the dictionary
+        if self.valid_indices is not None:
+            original_dict = self.dict_similarity_classes_exemplars
+            self.dict_similarity_classes_exemplars = {}
+
+            # Only keep classes in valid_indices
+            for key in self.valid_indices:
+                if key in original_dict:
+                    self.dict_similarity_classes_exemplars[key] = original_dict[key]
+
+            # Always include neutral if not dropping it
+            key_to_remove = (0, 0, 0, 0)
+            if not self.bool_drop_neutral_exemplar and key_to_remove not in self.valid_indices:
+                if key_to_remove in original_dict:
+                    self.dict_similarity_classes_exemplars[key_to_remove] = original_dict[key_to_remove]
+
+        # Now check for the neutral key
         key_to_remove = (0, 0, 0, 0)
         if key_to_remove not in self.dict_similarity_classes_exemplars:
             assert False, f"triplet_mining.py: Key '{key_to_remove}' not found in dict_similarity_classes_exemplars"
+
+        # Calculate num_states_drives based on the actual dictionary (which now only has valid_indices)
         if self.bool_drop_neutral_exemplar:
             _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
             print(f"Removed key '{key_to_remove}' from dict_similarity_classes_exemplars")
             self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
         else:
             self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
-        print(f"triplet_mining:init: loaded: {self.num_states_drives} states + drives")
 
-        # Initialize matrices as PyTorch tensors
+        print(f"triplet_mining:init: using {self.num_states_drives} states + drives for this module")
+
+        # Now initialize matrices with the correct size based on actual num_states_drives
         (self.matrix_alpha_left_right_right_left,
          self.matrix_alpha_left_neut_neut_left,
          self.matrix_alpha_right_neut_neut_right,
@@ -83,8 +145,10 @@ class TripletMining:
             for _ in range(9)
         ]
 
-        self.tensor_dists_class_neut = tf.Variable(initial_value=tf.zeros((self.num_states_drives,)))
-        self.neutral_embedding = tf.Variable(initial_value=tf.zeros((self.config.embedding_size,)))
+        # Initialize tensor_dists_class_neut with the correct size
+        self.tensor_dists_class_neut = torch.zeros(self.num_states_drives, dtype=torch.float32, requires_grad=False)
+        self.neutral_embedding = torch.zeros(self.config.embedding_size, dtype=torch.float32, requires_grad=False)
+
         self.subset_global_dict()
         self.pre_process_comparisons_data(anim_name)
 
@@ -183,21 +247,30 @@ class TripletMining:
         Calculate 1D tensor of either squared L2 norm or L2 norm of differences
         between class embeddings and the neutral embedding.
         """
-        # Determine neutral and modified embeddings
-        if self.bool_fixed_neutral_embedding:
-            neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
-        else:
-            neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
+        try:
+            # Determine neutral and modified embeddings
+            if self.bool_fixed_neutral_embedding:
+                neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
+            else:
+                neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
 
-        # Compute distances
-        differences = modified_embeddings - neutral_embedding
+                # Check that embeddings size matches what we expect
+                # if self.valid_indices is not None and modified_embeddings.shape[0] != len(self.valid_indices):
+                #     raise ValueError(f"Warning: Expected {len(self.valid_indices)} embeddings but got {modified_embeddings.shape[0]}")
 
-        if self.squared_class_neut_dist:
-            # Squared Euclidean distance
-            self.tensor_dists_class_neut = torch.sum(differences ** 2, dim=1)
-        else:
-            # Euclidean distance
-            self.tensor_dists_class_neut = torch.norm(differences, p=2, dim=1)
+
+            # Compute distances
+            differences = modified_embeddings - neutral_embedding
+
+            if self.squared_class_neut_dist:
+                # Squared Euclidean distance
+                self.tensor_dists_class_neut = torch.sum(differences ** 2, dim=1)
+            else:
+                # Euclidean distance
+                self.tensor_dists_class_neut = torch.norm(differences, p=2, dim=1)
+        except Exception as e:
+            print(f"Error in calculate_class_neut_distances: {e}")
+            raise e
 
     def pre_process_comparisons_data(self, anim_name):
         """

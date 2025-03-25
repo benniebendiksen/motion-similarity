@@ -528,6 +528,8 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
         # Normalize by number of valid modules
         if valid_modules > 0:
             overall_triplet_loss = overall_triplet_loss / valid_modules
+        else:
+            return overall_triplet_loss + 1e-8
 
         return overall_triplet_loss
 
