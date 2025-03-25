@@ -381,8 +381,8 @@ class TripletMining:
                         assert False, "selected1 is not 1 or 2"
                 else:
                     assert False, "selected0 is not 0 or 1"
-                # Instead of generating the two possible alpha values for a comparison (i.e., treating selected0 as anchor versus
-                # treating selected1 as anchor), let's extract only the dominant alpha value for each comparison (i.e., max difference).
+                # Alternatively to generating the two possible alpha values for a comparison (i.e., treating selected0 as anchor versus
+                # treating selected1 as anchor), we can extract only the dominant alpha value for each comparison (i.e., max difference).
                 diff_positive_1_anchor = max_row['count_normalized'] - ratio_positive_1_negative
                 diff_positive_2_anchor = max_row['count_normalized'] - ratio_positive_2_negative
                 if ratio_positive_1_negative < ratio_positive_2_negative:
@@ -621,12 +621,7 @@ class TripletMining:
             lambda x: [tuple(ast.literal_eval(token)) for token in x.split('_')])
         set_comparison_classes = set([efforts_tuple[0] for efforts_tuple in df_comparisons['efforts_tuples']]).union(
             set([efforts_tuple[1] for efforts_tuple in df_comparisons['efforts_tuples']]))
-        print(f"len set: {len(set_comparison_classes)}")
-
-        # dict_similarity_classes_exemplars = {key: value for key, value in
-        #                                      dict_similarity_classes_exemplars.items() if
-        #                                      key in
-        #                                      set_comparison_classes}
+        print(f"Loaded comparison data for: {anim_name} ...Num comparisons: {len(set_comparison_classes)}")
 
         dict_similarity_classes_exemplars = {key: value for key, value in
                                              self.dict_similarity_classes_exemplars.items() if

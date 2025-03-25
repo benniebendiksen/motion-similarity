@@ -15,7 +15,7 @@ sys.path.append(os.path.join(curr_path, 'networks'))
 from networks.similarity_network import SimilarityNetwork
 from networks.similarity_data_loader import SimilarityDataLoader
 from bvh_visualizing.datasetLoad import BVHDataset
-from bvh_visualizing.bvhvisualize import BVHAnimator
+from bvh_visualizing.bvhvisualize import DualBVHAnimator
 from bvh_visualizing.bvh import BVH
 from Config import Config
 import src.organize_synthetic_data as osd
@@ -167,26 +167,76 @@ def calculate_pairwise_distances(embeddings):
     return distances
 
 
-def visualize_embedding_pair(distance_tuples):
-    for tuple in distance_tuples:
-        key = tuple[1]
-        # parse key and form valid bvh file name
-        action = key[0]
-        effort = key[1]
-        bvh_file_name = f"{action}_{effort[0]}_{effort[1]}_{effort[2]}_{effort[3]}.bvh"
-        print(f"action: {action}")
-        # get directory based on action
-        dataset_dir = action + "_perform_user_study_1"
-        dataset = BVHDataset(directory="walking_perform_user_study_1")
-        animation = BVH()
-        a = animation.load(f"{dataset_dir}/{bvh_file_name}")
-        motion_data = dataset.extract_root_and_rotations(animation)
-        motion_data = torch.tensor(motion_data, dtype=torch.float32)
-        motion_data = motion_data.unsqueeze(0)
-        mot_root = motion_data[:, :, :1, :]
-        mot_rots = motion_data[:, :, 1:, :]
-        out = convert_to_bvh(mot_root, mot_rots, animation, "new.bvh")
-        anim = BVHAnimator(out)
+# def visualize_embedding_pair(distance_tuples):
+#     for tuple in distance_tuples:
+#         key = tuple[1]
+#         # parse key and form valid bvh file name
+#         action = key[0]
+#         effort = key[1]
+#         bvh_file_name = f"{action}_{effort[0]}_{effort[1]}_{effort[2]}_{effort[3]}.bvh"
+#         print(f"action: {action}")
+#         # get directory based on action
+#         dataset_dir = action + "_perform_user_study_1"
+#         dataset = BVHDataset(directory="walking_perform_user_study_1")
+#         animation = BVH()
+#         a = animation.load(f"{dataset_dir}/{bvh_file_name}")
+#         motion_data = dataset.extract_root_and_rotations(animation)
+#         motion_data = torch.tensor(motion_data, dtype=torch.float32)
+#         motion_data = motion_data.unsqueeze(0)
+#         mot_root = motion_data[:, :, :1, :]
+#         mot_rots = motion_data[:, :, 1:, :]
+#         out = convert_to_bvh(mot_root, mot_rots, animation, "new.bvh")
+#         anim = BVHAnimator(out)
+
+def visualize_embedding_pair(distance_tuple):
+    """
+    Visualize a pair of motions from the embedding distance rankings side by side.
+
+    Args:
+        distance_tuple: Tuple (distance, key1, key2) where keys contain animation type and effort values
+    """
+    distance, key1, key2 = distance_tuple
+
+    # Process first animation
+    action1 = key1[0]
+    effort1 = key1[1]
+    bvh_file_name1 = f"{action1}_{effort1[0]}_{effort1[1]}_{effort1[2]}_{effort1[3]}.bvh"
+    dataset_dir1 = f"{action1}_perform_user_study_1"
+
+    # Process second animation
+    action2 = key2[0]
+    effort2 = key2[1]
+    bvh_file_name2 = f"{action2}_{effort2[0]}_{effort2[1]}_{effort2[2]}_{effort2[3]}.bvh"
+    dataset_dir2 = f"{action2}_perform_user_study_1"
+
+    print(f"Visualizing animations with embedding distance {distance:.4f}:")
+    print(f"  1: {action1} with efforts {effort1}")
+    print(f"  2: {action2} with efforts {effort2}")
+
+    # Load first animation
+    dataset1 = BVHDataset(directory=dataset_dir1)
+    animation1 = BVH()
+    animation1.load(f"{dataset_dir1}/{bvh_file_name1}")
+    motion_data1 = dataset1.extract_root_and_rotations(animation1)
+    motion_data1 = torch.tensor(motion_data1, dtype=torch.float32).unsqueeze(0)
+    mot_root1 = motion_data1[:, :, :1, :]
+    mot_rots1 = motion_data1[:, :, 1:, :]
+
+    # Load second animation
+    dataset2 = BVHDataset(directory=dataset_dir2)
+    animation2 = BVH()
+    animation2.load(f"{dataset_dir2}/{bvh_file_name2}")
+    motion_data2 = dataset2.extract_root_and_rotations(animation2)
+    motion_data2 = torch.tensor(motion_data2, dtype=torch.float32).unsqueeze(0)
+    mot_root2 = motion_data2[:, :, :1, :]
+    mot_rots2 = motion_data2[:, :, 1:, :]
+
+    # Create output BVH files
+    out1 = convert_to_bvh(mot_root1, mot_rots1, animation1, dataset1, "temp_anim1.bvh")
+    out2 = convert_to_bvh(mot_root2, mot_rots2, animation2, dataset2, "temp_anim2.bvh")
+
+    # side-by-side visualization
+    DualBVHAnimator(out1, out2, distance)
 
 
 def main():
@@ -249,7 +299,7 @@ def main():
         else:
             print(f"{distance:<10.4f} {str(key1):<25} {str(key2):<25}")
 
-    visualize_embedding_pair(distances[0:2])
+    visualize_embedding_pair(distances[0])
     # Save results to file
     # with open(f"pairwise_distances_{anim_name}_{partition}.txt", "w") as f:
     #     f.write(f"Pairwise distances (sorted by distance, ascending):\n")
