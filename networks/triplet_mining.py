@@ -2,6 +2,8 @@
 static module for organizing triplet mining data as well as performing online triplet mining
 """
 from pathlib import Path
+
+import numpy as np
 import tensorflow as tf
 import torch
 import pandas as pd
@@ -12,6 +14,7 @@ import pickle
 class TripletMining:
     def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None):
         self.config = config
+        self.anim_name = anim_name
         self.dict_similarity_classes_exemplars = {}
         self.matrix_alpha_left_right_right_left = None
         self.matrix_alpha_left_neut_neut_left = None
@@ -203,8 +206,6 @@ class TripletMining:
 
         return neutral_embedding, modified_embeddings
 
-    import torch
-
     def calculate_left_right_distances(self, embeddings):
         """Compute the 2D matrix of distances between all 56 class embeddings."""
 
@@ -217,30 +218,60 @@ class TripletMining:
         dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
 
         # Compute the squared norms
-        square_norm = torch.diagonal(dot_product)
+        square_norm = torch.sum(modified_embeddings ** 2, dim=1)
 
         # Compute pairwise squared Euclidean distances
-        distances = square_norm.unsqueeze(1) - 2.0 * dot_product + square_norm.unsqueeze(0)
+        distances = square_norm.unsqueeze(1) + square_norm.unsqueeze(0) - 2.0 * dot_product
 
         # Clamp to ensure no negative distances due to floating-point errors
         distances = torch.clamp(distances, min=0.0)
 
         if not self.squared_left_right_euc_dist:
-            # Add small epsilon to avoid sqrt(0) issues
-            mask = distances == 0.0
-            distances = distances + mask.float() * 1e-16
+            # For non-squared distances, compute square root
+            # Add a small epsilon to all elements to avoid numerical instability
+            epsilon = 1e-12  # Slightly larger epsilon for better stability
+            sqrt_distances = torch.sqrt(distances + epsilon)
+            return sqrt_distances
+        else:
+            # Return squared distances
+            return distances
 
-            # Ensure numerical stability for sqrt
-            distances = torch.sqrt(torch.clamp(distances, min=1e-16))
-
-            # Reset distances where mask is True back to zero
-            distances[mask] = 0.0
-
-            # Check for NaNs or Infs
-            if torch.isnan(distances).any() or torch.isinf(distances).any():
-                raise ValueError("NaN or Inf values found in distances")
-
-        return distances
+    # def calculate_left_right_distances(self, embeddings):
+    #     """Compute the 2D matrix of distances between all 56 class embeddings."""
+    #
+    #     if self.bool_fixed_neutral_embedding:
+    #         _neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
+    #     else:
+    #         _neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
+    #
+    #     # Compute the dot product
+    #     dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
+    #
+    #     # Compute the squared norms
+    #     square_norm = torch.diagonal(dot_product)
+    #
+    #     # Compute pairwise squared Euclidean distances
+    #     distances = square_norm.unsqueeze(1) - 2.0 * dot_product + square_norm.unsqueeze(0)
+    #
+    #     # Clamp to ensure no negative distances due to floating-point errors
+    #     distances = torch.clamp(distances, min=0.0)
+    #
+    #     if not self.squared_left_right_euc_dist:
+    #         # Add small epsilon to avoid sqrt(0) issues
+    #         mask = distances == 0.0
+    #         distances = distances + mask.float() * 1e-16
+    #
+    #         # Ensure numerical stability for sqrt
+    #         distances = torch.sqrt(torch.clamp(distances, min=1e-16))
+    #
+    #         # Reset distances where mask is True back to zero
+    #         distances[mask] = 0.0
+    #
+    #         # Check for NaNs or Infs
+    #         if torch.isnan(distances).any() or torch.isinf(distances).any():
+    #             raise ValueError("NaN or Inf values found in distances")
+    #
+    #     return distances
 
     def calculate_class_neut_distances(self, embeddings):
         """
@@ -263,8 +294,9 @@ class TripletMining:
             differences = modified_embeddings - neutral_embedding
 
             if self.squared_class_neut_dist:
-                # Squared Euclidean distance
-                self.tensor_dists_class_neut = torch.sum(differences ** 2, dim=1)
+                # include numerical stability term
+                epsilon = 1e-12
+                self.tensor_dists_class_neut = torch.sqrt(torch.sum(differences ** 2, dim=1) + epsilon)
             else:
                 # Euclidean distance
                 self.tensor_dists_class_neut = torch.norm(differences, p=2, dim=1)
@@ -304,22 +336,46 @@ class TripletMining:
 
         def _generate_df_alphas():
             """
-            generate alpha_dataframes where each row is a comparison between two similarity classes (and the neutral) and
-            contains the corresponding two out of six possible alpha values (each comparison has two alpha values, one for each
-            of the positives.
+            Processes user comparison data to generate alpha values and direct comparison metrics between similarity classes.
 
-            df_comparisons: DataFrame: contains the user comparison data:
-            columns - efforts_tuples, selected0, selected1, count, count_normalized, selected_motions
+            This method analyzes triplets of comparisons (groups of 3 rows) from the input DataFrame 'df_comparisons',
+            where each triplet contains all possible pairwise comparisons between three options (typically labeled as 0, 1, 2,
+            representing left agent, neutral, and right agent). For each triplet, it:
 
-           Args:
-               None
+            1. Identifies the most preferred pair (highest count_normalized value)
+            2. Extracts the direct comparison value between options 0 and 2 when available
+            3. Calculates two alpha values for the preferred pair:
+               - alpha_positive_1_positive_2: How much more the first element is preferred when paired
+                 with the second element compared to when it's paired with the third (negative) element
+               - alpha_positive_2_positive_1: How much more the second element is preferred when paired
+                 with the first element compared to when it's paired with the third (negative) element
 
-           Returns:
-               None
+            Alpha Value Calculation:
+            For a preferred pair (A,B) with third option C:
+            - alpha_A_B = count_normalized(A,B) - count_normalized(A,C)
+            - alpha_B_A = count_normalized(A,B) - count_normalized(B,C)
+
+            These alpha values quantify the strength of preference for each element in the pairing, relative to
+            their preference when paired with the third element. Higher alpha values indicate a stronger preference
+            effect when the two elements are paired together.
+
+            The resulting DataFrame contains one row per triplet (keeping only the row with maximum count_normalized),
+            and includes:
+            - Original comparison data (efforts_tuples, selected motions, etc.)
+            - Six possible alpha columns (alpha_0_1, alpha_1_0, alpha_0_2, alpha_2_0, alpha_1_2, alpha_2_1)
+            - Direct comparison value between options 0 and 2 (direct_02_comparison)
+
+            This DataFrame provides a comprehensive view of similarity relationships between effort tuples,
+            enabling both direct and indirect comparison metrics for distance-based analysis.
+
+            Returns:
+                pandas.DataFrame: DataFrame containing processed comparison data with alpha values
+                                  and direct comparison metrics
+
             """
-            counter_df_comparisons_triplets = 0
             comparisons_list = []
             selection_values = [0, 1, 2]
+
             # Initialize new columns for pairwise comparison alpha values (two values created per pairwise comparison)
             df_comparisons['alpha_0_2'] = 0.0
             df_comparisons['alpha_2_0'] = 0.0
@@ -327,19 +383,30 @@ class TripletMining:
             df_comparisons['alpha_2_1'] = 0.0
             df_comparisons['alpha_1_0'] = 0.0
             df_comparisons['alpha_1_2'] = 0.0
+
+            # Add new column for the "correct" count_normalized (where selected0=0, selected1=2)
+            df_comparisons['direct_comparison_value'] = np.nan
+
             # Iterate over three consecutive rows
             # selected_0 is either 0 (agent left) or 1 (neutral) and selected_1 is either 1 or 2 (agent right) (else we terminate)
             for i in range(0, len(df_comparisons), 3):
                 group = df_comparisons.iloc[i:i + 3]
-                # counter_df_comparisons_triplets += 1
-                # print(f"counter_df_comparisons_triplets: {counter_df_comparisons_triplets}")
 
                 # Find the row within a triplet with the maximum 'count_normalized' value, thereby establishing the
                 # positive pair (i.e., selected0 and selected1 which could be (0,1), (0,2) or (1,2)
                 max_row = group.loc[group['count_normalized'].idxmax()]
 
+                # Extract the direct comparison value (selected0=0, selected1=2) if it exists
+                direct_comparison_row = group[(group['selected0'] == 0) & (group['selected1'] == 2)]
+                direct_comparison_value = None
+                if not direct_comparison_row.empty:
+                    direct_comparison_value = direct_comparison_row.iloc[0]['count_normalized']
+                    # Store this value in the max_row
+                    df_comparisons.loc[max_row.name, 'direct_comparison_value'] = direct_comparison_value
+
                 max_selected_0, max_selected_1 = max_row['selected0'], max_row['selected1']
                 negative_index = next(x for x in selection_values if x != max_selected_0 and x != max_selected_1)
+
                 # find the anchor_positive ratio value under the cases in which anchor is each of the positive pair,
                 # respectively, and positive is the negative class
                 if max_selected_0 == 0:
@@ -361,7 +428,6 @@ class TripletMining:
                                                                                 max_selected_1)].iloc[
                                 0][
                                 'count_normalized']
-
                     else:
                         assert False, "selected1 is not 1 or 2"
 
@@ -381,6 +447,7 @@ class TripletMining:
                         assert False, "selected1 is not 1 or 2"
                 else:
                     assert False, "selected0 is not 0 or 1"
+
                 # Alternatively to generating the two possible alpha values for a comparison (i.e., treating selected0 as anchor versus
                 # treating selected1 as anchor), we can extract only the dominant alpha value for each comparison (i.e., max difference).
                 diff_positive_1_anchor = max_row['count_normalized'] - ratio_positive_1_negative
@@ -391,15 +458,12 @@ class TripletMining:
                 else:
                     alpha_positive_1_positive_2 = diff_positive_1_anchor
                     alpha_positive_2_positive_1 = diff_positive_2_anchor
-                # max_diff = max(diff_positive_1_anchor, diff_positive_2_anchor)
-                # alpha_positive_1_positive_2 = max_row['count_normalized'] - ratio_positive_1_negative
-                # alpha_positive_2_positive_1 = max_row['count_normalized'] - ratio_positive_2_negative
+
                 if max_row['efforts_tuples'] == '[-1,-1,-1,0]_[0,-1,-1,1]':
                     print(f"ALPHAS: {alpha_positive_1_positive_2} . {alpha_positive_2_positive_1}")
 
                 # Concatenate selected0 and selected1 to pattern match the alpha anchor_positive column
                 alpha_selected_0_selected_1_column = f"alpha_{max_selected_0}_{max_selected_1}"
-
                 alpha_selected_1_selected_0_column = f"alpha_{max_selected_1}_{max_selected_0}"
 
                 df_comparisons.loc[max_row.name, alpha_selected_0_selected_1_column] = alpha_positive_1_positive_2
@@ -408,10 +472,18 @@ class TripletMining:
 
             alpha_dataframes = pd.DataFrame(comparisons_list)
             alpha_dataframes.reset_index(drop=True, inplace=True)
-            # print(f'{alpha_dataframes=}')
-            # alpha_dataframes = alpha_dataframes[:10]
-            # print("-------------------------------------")
-            # print(f'{alpha_dataframes=}')
+
+            # Filter out rows where direct_comparison_value is NaN
+            # if 'direct_comparison_value' in alpha_dataframes.columns:
+            #     # Remove NaN values - only keep rows with a valid direct comparison
+            #     alpha_dataframes_filtered = alpha_dataframes.dropna(subset=['direct_comparison_value'])
+            #     # If you need to keep all rows but want to indicate which ones have valid direct comparisons:
+            #     # alpha_dataframes['has_direct_comparison'] = ~alpha_dataframes['direct_comparison_value'].isna()
+            #
+            #     # Optionally, you can also rename the column to something more descriptive
+            #     alpha_dataframes.rename(columns={'direct_comparison_value': 'direct_02_comparison'}, inplace=True)
+
+            self.alpha_dataframes = alpha_dataframes
             return alpha_dataframes
 
         def _populate_alpha_matrices_and_masks(df_alphas):

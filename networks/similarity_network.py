@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, StepLR
 import networks.custom_losses as custom_losses
 from keras import callbacks
 import logging
@@ -138,7 +138,7 @@ class SimilarityNetwork:
     """
 
     def __init__(self, train_loader, validation_loader, test_loader, checkpoint_root_dir, triplet_modules,
-                 architecture_variant, config, val_triplet_modules=None):
+                 architecture_variant, config, val_triplet_modules=None, lr_scheduler_type='plateau'):
         super().__init__()
         self.config = config
         self.train_loader = train_loader
@@ -154,6 +154,10 @@ class SimilarityNetwork:
         self.architecture_variant = architecture_variant
         self.checkpoint_dir = checkpoint_root_dir
         self.embedding_size = self.config.embedding_size
+
+        # Add learning rate scheduler type
+        self.lr_scheduler_type = lr_scheduler_type
+        self.initial_lr = 0.0001
 
         # Use GPU if available
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -198,8 +202,37 @@ class SimilarityNetwork:
         # For backward compatibility
         self.criterion = self.train_criterion
 
-        # Setup optimizer
-        self.optimizer = optim.Adam(self.network.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        # Setup optimizer with the initial learning rate
+        self.optimizer = optim.Adam(self.network.parameters(), lr=self.initial_lr, betas=(0.5, 0.999))
+
+        # Setup the learning rate scheduler based on the type
+        if self.lr_scheduler_type == 'plateau':
+            # Reduce learning rate when validation loss plateaus
+            self.scheduler = ReduceLROnPlateau(
+                self.optimizer,
+                mode='min',
+                factor=0.9,  # Multiply LR by this factor
+                patience=5,  # Number of epochs with no improvement
+                verbose=True,  # Print message when LR is reduced
+                min_lr=1e-6  # Minimum LR
+            )
+        elif self.lr_scheduler_type == 'cosine':
+            # Cosine annealing scheduler
+            self.scheduler = CosineAnnealingLR(
+                self.optimizer,
+                T_max=self.config.n_similarity_epochs,  # Max number of iterations
+                eta_min=1e-6  # Minimum LR
+            )
+        elif self.lr_scheduler_type == 'step':
+            # Step decay scheduler
+            self.scheduler = StepLR(
+                self.optimizer,
+                step_size=10,  # Decay LR every step_size epochs
+                gamma=0.1  # Multiply LR by gamma
+            )
+        else:
+            self.scheduler = None
+            print(f"Warning: Unknown scheduler type '{self.lr_scheduler_type}'. No scheduler will be used.")
 
     def save_checkpoint(self, epoch=None):
         """Save model checkpoint"""
@@ -217,6 +250,8 @@ class SimilarityNetwork:
         torch.save({
             'model_state_dict': self.network.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
+            'epoch': epoch
         }, checkpoint_path)
 
         print(f"Model weights saved to {checkpoint_path}")
@@ -290,17 +325,28 @@ class SimilarityNetwork:
             # Calculate average validation loss
             val_epoch_loss = val_loss / val_batch_count
 
+            # Step the scheduler if it's a plateau scheduler
+            if self.scheduler:
+                if isinstance(self.scheduler, ReduceLROnPlateau):
+                    self.scheduler.step(val_epoch_loss)
+                else:
+                    self.scheduler.step()
+
+            # Display current learning rate
+            current_lr = self.optimizer.param_groups[0]['lr']
+            print(f"Current Learning Rate: {current_lr:.8f}")
+
             # Log or print the epoch results
             # self.logger.on_epoch_end(epoch, epoch_loss)
             print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
 
             # Save checkpoint if this is the best model so far
-            if val_epoch_loss < best_loss:
+            if val_epoch_loss < best_loss and epoch > 30:
                 best_loss = val_epoch_loss
                 self.save_checkpoint(epoch + 1)
 
         # Save final model
-        # self.save_checkpoint()
+        self.save_checkpoint(self.config.n_similarity_epochs)
 
     def evaluate(self):
         """

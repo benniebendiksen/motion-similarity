@@ -125,14 +125,17 @@ class BVHAnimator:
 
 
 class DualBVHAnimator:
-    def __init__(self, bvh1, bvh2, distance=None):
+    def __init__(self, bvh1, bvh2, features, distance, effort_1, effort_2, alpha_value=None):
         """
         Create a side-by-side visualization of two BVH animations.
 
         Args:
             bvh1: First BVH object
             bvh2: Second BVH object
+            features: "embeddings" or "raw_features"
             distance: Optional distance metric to display
+            effort_1: Effort value for first animation (tuple of 4 ints)
+            effort_2: Effort value for second animation (tuple of 4 ints)
         """
         self.bvh1 = bvh1
         self.bvh2 = bvh2
@@ -141,17 +144,19 @@ class DualBVHAnimator:
         # Create a figure with two subplots side by side
         self.fig = plt.figure(figsize=(12, 6))
 
-        # Add title with distance if provided
-        if distance is not None:
-            self.fig.suptitle(f"Embedding Distance: {distance:.4f}", fontsize=14)
+        title = f"Distance: {distance:.4f}"
+        if alpha_value is not None:
+            title += f", Alpha: {alpha_value:.4f}"
+
+        self.fig.suptitle(f"Features: {features}\nDistance: {distance:.4f}\nAlpha Value: {alpha_value}", fontsize=14)
 
         # Create 3D subplot for first animation
         self.ax1 = self.fig.add_subplot(121, projection='3d')
-        self.ax1.set_title("Animation 1")
+        self.ax1.set_title(f"effort: {effort_1}")
 
         # Create 3D subplot for second animation
         self.ax2 = self.fig.add_subplot(122, projection='3d')
-        self.ax2.set_title("Animation 2")
+        self.ax2.set_title(f"effort: {effort_2}")
 
         # Calculate combined bounding box for consistent views
         self.bbMin, self.bbMax = self._calculate_combined_bb()

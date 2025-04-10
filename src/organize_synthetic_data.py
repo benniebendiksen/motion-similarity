@@ -3,11 +3,14 @@ static module for organizing synthetic motion data in the context of both effort
 """
 import sys
 
+import torch
+import tensorflow as tf
 from src.batches import Batches
 from pymo.parsers import BVHParser
 from pymo.viz_tools import *
 from sklearn.preprocessing import StandardScaler
 from pymo.preprocessing import *
+from scipy.spatial.transform import Rotation
 from os import path
 from sklearn.pipeline import Pipeline
 import numpy as np
@@ -74,22 +77,148 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
     Prepare motion data for training.
 
     Args:
-        rotations (bool): Whether to include rotation values in exemplars.
-        velocities (bool): Whether to include velocities in exemplars.
+        config_instance: Configuration instance
+        batches_instance: Batches instance for storing processed data
+        rotations (bool): Whether to include rotation values in exemplars
+        velocities (bool): Whether to include velocities in exemplars
+        similarity_pre_processing_only (bool): If True, only process data for similarity network
+        anim_name (str): Animation name (walking, pointing, or picking)
 
     Returns:
         None
     """
 
+    # def _preprocess_pipeline(parsed_data):
+    #     """
+    #     Process BVH motion data by converting Euler rotations to quaternions.
+    #
+    #     Args:
+    #         parsed_data: Parsed BVH data (pymo.data.MocapData instance)
+    #
+    #     Returns:
+    #         numpy.ndarray: Motion data with rotations represented as quaternions
+    #     """
+    #     print(f"Processing BVH data with {len(parsed_data.skeleton)} joints, {parsed_data.values.shape[0]} frames")
+    #
+    #     # First convert to numpy array with Euler angles
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter("ignore")
+    #         # Use 'euler' as param type to get Euler angles
+    #         data_pipe_euler = Pipeline(steps=[
+    #             ('param', MocapParameterizer('euler')),
+    #             ('np', Numpyfier()),
+    #         ])
+    #
+    #     euler_data = data_pipe_euler.fit_transform([parsed_data])[0]
+    #     print(f"Euler data shape: {euler_data.shape}")
+    #
+    #     # Separate position and rotation data
+    #     # First 3 columns are root positions (x, y, z)
+    #     positions = euler_data[:, :3]  # Root joint positions
+    #     euler_rotations = euler_data[:, 3:]  # All joint rotations
+    #
+    #     # Convert Euler rotations to quaternions
+    #     # Reshape to group by joints (each joint has 3 rotations: z, x, y according to BVH CHANNELS)
+    #     n_frames = euler_rotations.shape[0]
+    #     n_rotation_values = euler_rotations.shape[1]
+    #     n_joints = n_rotation_values // 3
+    #
+    #     print(f"Number of frames: {n_frames}")
+    #     print(f"Number of joints with rotations: {n_joints}")
+    #
+    #     euler_rotations_reshaped = euler_rotations.reshape(n_frames, n_joints, 3)
+    #
+    #     # Initialize array for quaternions (4 values per quaternion: x, y, z, w)
+    #     quat_rotations = np.zeros((n_frames, n_joints * 4))
+    #
+    #     # Convert each joint's Euler angles to quaternion
+    #     # BVH typically uses 'ZXY' order as per the provided BVH structure
+    #     print("Converting Euler angles to quaternions...")
+    #     for frame in range(n_frames):
+    #         for joint in range(n_joints):
+    #             # Get Euler angles for this joint
+    #             euler_angles = euler_rotations_reshaped[frame, joint]
+    #
+    #             # Convert to quaternion using 'zxy' order
+    #             rot = Rotation.from_euler('zxy', euler_angles, degrees=True)
+    #             quat = rot.as_quat()  # [x, y, z, w] format
+    #
+    #             # Store in output array
+    #             quat_rotations[frame, joint * 4:(joint + 1) * 4] = quat
+    #
+    #     print(f"Quaternion rotations shape: {quat_rotations.shape}")
+    #
+    #     # Combine positions and quaternion rotations
+    #     combined_data = np.hstack((positions, quat_rotations))
+    #     print(f"Final combined data shape: {combined_data.shape}")
+    #
+    #     # Show the expansion in data size
+    #     print(f"Original Euler data had {euler_data.size} values")
+    #     print(f"Quaternion data has {combined_data.size} values")
+    #     print(f"Ratio rotations (quat/euler): {combined_data.size / euler_rotations.size:.2f}")
+    #
+    #     return combined_data
+
     def _preprocess_pipeline(parsed_data):
+        """
+        Process BVH motion data by converting Euler rotations to normalized quaternions.
+
+        Args:
+            parsed_data: Parsed BVH data (pymo.data.MocapData instance)
+
+        Returns:
+            numpy.ndarray: Motion data with normalized quaternions
+        """
+        print(f"Processing BVH data with {len(parsed_data.skeleton)} joints, {parsed_data.values.shape[0]} frames")
+
+        # First convert to numpy array with Euler angles
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            data_pipe_expmap = Pipeline(steps=[
-                ('param', MocapParameterizer('expmap')),
+            data_pipe_euler = Pipeline(steps=[
+                ('param', MocapParameterizer('euler')),
                 ('np', Numpyfier()),
-                # ('down', DownSampler(4))
             ])
-        return data_pipe_expmap.fit_transform([parsed_data])[0]
+
+        euler_data = data_pipe_euler.fit_transform([parsed_data])[0]
+        print(f"Euler data shape: {euler_data.shape}")
+
+        # Separate position and rotation data
+        positions = euler_data[:, :3]  # Root joint positions
+        euler_rotations = euler_data[:, 3:]  # All joint rotations
+
+        # Convert Euler rotations to quaternions
+        n_frames = euler_rotations.shape[0]
+        n_rotation_values = euler_rotations.shape[1]
+        n_joints = n_rotation_values // 3
+
+        print(f"Number of frames: {n_frames}")
+        print(f"Number of joints with rotations: {n_joints}")
+
+        euler_rotations_reshaped = euler_rotations.reshape(n_frames, n_joints, 3)
+
+        # Initialize array for quaternions
+        quat_rotations = np.zeros((n_frames, n_joints * 4))
+
+        print("Converting and normalizing Euler angles to quaternions...")
+        for frame in range(n_frames):
+            for joint in range(n_joints):
+                # Convert to quaternion
+                rot = Rotation.from_euler('zxy', euler_rotations_reshaped[frame, joint], degrees=True)
+                quat = rot.as_quat()  # [x, y, z, w]
+
+                # Normalize quaternion
+                quat /= np.linalg.norm(quat)
+
+                # Store normalized quaternion
+                quat_rotations[frame, joint * 4:(joint + 1) * 4] = quat
+
+        print(f"Quaternion rotations shape: {quat_rotations.shape}")
+
+        # Combine positions and quaternion rotations
+        combined_data = np.hstack((positions, quat_rotations))
+        print(f"Final combined data shape: {combined_data.shape}")
+
+        return combined_data
 
     def _get_standardized_rotations(data_expmaps):
         data_expmaps = _z_score_generator(data_expmaps)
@@ -165,6 +294,8 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
         singleton_batches = batches_instance
         bvh_counter = 0
         bvh_frame_rate = set()
+
+        # Set directory based on animation name
         if anim_name == "walking":
             dir_filenames = config_instance.bvh_files_dir_walking
             filenames = os.listdir(dir_filenames)
@@ -176,59 +307,83 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
             filenames = os.listdir(dir_filenames)
         else:
             raise ValueError("anim_name must be one of the following: WALKING, POINTING, PICKING")
+
         print(
             f"osd::prep_all_data_for_training(): {anim_name} filenames dir: {dir_filenames}, num files: {len(filenames)}")
+
+        # Import needed here to avoid circular imports
+        from pymo.parsers import BVHParser
+        parser = BVHParser()
+
         for f in filenames:
             if f.endswith("bvh"):
-                print(f"path: {path}")
-                name = path.splitext(f)[0]  # exclude extension bvh by returning the root
+                print(f"path: {f}")
+                name = os.path.splitext(f)[0]  # exclude extension bvh by returning the root
                 name_split = name.split('_')  # get effort values from the file name
                 print(f"name_split: {name_split}, length: {len(name_split)}")
                 anim = name_split[0]
-                f_full_path = dir_filenames + f
-                print(1)
+                f_full_path = os.path.join(dir_filenames, f)
+                print(f"Processing file: {f_full_path}")
+
+                # Extract effort values from filename
                 efforts_list = [float(p) for p in name.split('_')[-4:]]
-                print(1.5)
                 tuple_effort_list = tuple(efforts_list)
+
+                # Skip if not in target exemplars
                 if similarity_pre_processing_only:
                     if tuple_effort_list not in singleton_batches.dict_similarity_exemplars.keys():
                         continue
+
                 singleton_batches.state_drive_exemplar_idx = 0
-                print(f"full path: {f_full_path}")
-                # clear_file(f_full_path)  # remove the : from the file
-                parsed_data = parser.parse(f_full_path)  # parsed file of type pymo.data.MocapData
+
+                # Parse BVH file
+                parsed_data = parser.parse(f_full_path)
                 bvh_frame_rate.add(parsed_data.framerate)
-                print(2)
                 assert len(bvh_frame_rate) == 1, f"More than one frame rate present!!! {bvh_frame_rate}"
+
+                # Process the data based on configuration
                 if rotations and velocities:
-                    file_name = 'data/all_synthetic_motions_velocities_effort.csv'
-                    data_expmaps = _preprocess_pipeline(parsed_data)
-                    # remove root joint absolute positions
-                    data_expmaps = data_expmaps[:, 3:]
-                    data_velocities = _get_standardized_velocities(parsed_data)
-                    # stack expmap angles for all joints horizontally to data_velocities
-                    data = np.hstack((data_velocities, data_expmaps))
+                    # Process with both rotations and velocities
+                    data_quats = _preprocess_pipeline(parsed_data)
+                    # Remove root joint absolute positions if needed
+                    data_quats = data_quats[:, 3:]
+                    data_velocities = _get_standardized_velocities(data_quats)
+                    # Stack quaternion rotations and velocities
+                    data = np.hstack((data_velocities, data_quats))
                 elif not rotations and velocities:
-                    data_expmaps = _preprocess_pipeline(parsed_data)
-                    data = _get_standardized_velocities(data_expmaps)
+                    # Process with only velocities
+                    data_quats = _preprocess_pipeline(parsed_data)
+                    data = _get_standardized_velocities(data_quats)
                 else:
-                    data_expmaps = _preprocess_pipeline(parsed_data)
-                    data_expmaps = data_expmaps[:, 3:]
-                    data = _get_standardized_rotations(data_expmaps)
-                    # data = np.hstack((data_rotations, data_expmaps))
+                    # Process with only rotations (default)
+                    data_quats = _preprocess_pipeline(parsed_data)
+                    print(f"Processed motion matrix of shape: {data_quats.shape}")
+                    # Remove root joint absolute positions
+                    data_quats = data_quats[:, 3:]
+                    print(f"Motion matrix after removing root positions: {data_quats.shape}")
+                    data = _get_standardized_rotations(data_quats)
+
                 bvh_counter += 1
-                print(3)
+
+                # Check if data is large enough
                 if data.shape[0] < config_instance.time_series_size:
                     assert False, f"Preprocessed file too small- {data.shape[0]} - relative to exemplar size -" \
                                   f" {config_instance.time_series_size}"
-                f_rep = np.tile(efforts_list, (data.shape[0], 1))
-                # append anim as an additional column
-                a_rep = np.tile(anim_ind[str.upper(anim)], (data.shape[0], 1))
-                # animation name is fifth column
-                file_data = np.concatenate((a_rep, data), axis=1)
-                # append efforts (the first 4 column(s) will be the efforts)
-                file_data = np.concatenate((f_rep, file_data), axis=1)
-                print(4)
+
+                file_data = data
+                # # Add effort values and animation type to data
+                # f_rep = np.tile(efforts_list, (data.shape[0], 1))
+                # # Add animation type as an additional column
+                # anim_ind = {"WALKING": 0, "POINTING": 1, "PICKING": 2}  # Map animation names to indices
+                # a_rep = np.tile(anim_ind[str.upper(anim)], (data.shape[0], 1))
+                #
+                # # Combine data
+                # file_data = np.concatenate((a_rep, data), axis=1)
+                # file_data = np.concatenate((f_rep, file_data), axis=1)
+                #
+                # print(f"Motion matrix after adding effort values and anim name: {file_data.shape}")
+
+                # Store or process the data
                 if similarity_pre_processing_only:
                     print(
                         f"Anim: {anim_name}, {bvh_counter} ... Appending similarity class exemplar for tuple: {tuple_effort_list}")
@@ -236,32 +391,32 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
                 else:
                     apply_moving_window(singleton_batches, file_data)
 
-        print(5)
+        # Post-processing steps
         config_instance.bvh_file_num = bvh_counter
-        # singleton_batches.store_effort_labels_dict()
-        singleton_batches.balance_single_exemplar_similarity_classes_by_frame_count(anim_name)
-        # if conf.bool_fixed_neutral_embedding:
-        #     singleton_batches.pop_similarity_dict_element(key=(0, 0, 0, 0))
-        # else:
+        # singleton_batches.balance_single_exemplar_similarity_classes_by_frame_count(anim_name)
         singleton_batches.move_tuple_to_dict_similarity_front(key=(0, 0, 0, 0))
         singleton_batches.convert_exemplar_np_arrays_to_tensors()
         singleton_batches.store_similarity_labels_exemplars_dict(anim_name)
+
+        # Verify data integrity
         assert singleton_batches.batch_idx == len(
             singleton_batches.dict_efforts_labels.values()) - 1, f"batch_idx: {singleton_batches.batch_idx}, " \
                                                                  f"num" \
                                                                  f"labels: {len(singleton_batches.dict_efforts_labels.values())}"
-        singleton_batches.verify_dict_similarity_exemplars()
+        # singleton_batches.verify_dict_similarity_exemplars()
     except Exception as e:
         print(f"Error in prep_all_data_for_training: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit()
+
 
 def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     """
     Load similarity dict of all class exemplars and split across train, validation, and test sets.
 
     Args:
-        train_val_split: float: percentage of data to be used for training versus validation and
-        test sets
+        train_val_split: float:keep at 1.0; vestigial param given that splitting occurs after returning to main.py
 
     Returns:
         similarity_dict: dict: partitioned similarity dict of all class exemplars
@@ -271,9 +426,68 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     singleton_batches = Batches(config)
     if not os.path.isfile(file_path):
         print(f"osd::load_similarity_data(): Generating similarity data for {anim_name} with path: {file_path}")
-        prep_all_data_for_training(config_instance=config, batches_instance=singleton_batches, rotations=True, velocities=False, similarity_pre_processing_only=True,
+        prep_all_data_for_training(config_instance=config, batches_instance=singleton_batches, rotations=True,
+                                   velocities=False, similarity_pre_processing_only=True,
                                    anim_name=anim_name)
+
+    # Load the dictionary
     dict_similarity_classes_exemplars = pickle.load(open(file_path, "rb"))
+
+    # Print information about the loaded dictionary structure
+    print(f"\nDICTIONARY STRUCTURE EXPLORATION FOR {anim_name}:")
+    print(f"Number of keys in dictionary: {len(dict_similarity_classes_exemplars)}")
+
+    # Check 2-3 example keys and their values
+    sample_keys = list(dict_similarity_classes_exemplars.keys())[:3]  # Take first 3 keys for example
+    print(f"Sample keys: {sample_keys}")
+
+    # Explore the nested structure for each sample key
+    for idx, key in enumerate(sample_keys):
+        exemplars = dict_similarity_classes_exemplars[key]
+        print(f"\nKey {idx + 1}: {key}")
+        print(f"  Number of exemplars: {len(exemplars)}")
+
+        if len(exemplars) > 0:
+            # Check the type and shape of exemplars
+            exemplar = exemplars[0]
+            print(f"  First exemplar type: {type(exemplar)}")
+
+            if isinstance(exemplar, (torch.Tensor, np.ndarray, tf.Tensor)):
+                if isinstance(exemplar, torch.Tensor):
+                    shape = exemplar.shape
+                    dtype = exemplar.dtype
+                elif isinstance(exemplar, np.ndarray):
+                    shape = exemplar.shape
+                    dtype = exemplar.dtype
+                elif isinstance(exemplar, tf.Tensor):
+                    shape = exemplar.shape
+                    dtype = exemplar.dtype
+                print(f"  First exemplar shape: {shape}")
+                print(f"  First exemplar dtype: {dtype}")
+            else:
+                print(f"  First exemplar is not a tensor or array, it's: {type(exemplar)}")
+
+    # Check if all exemplars have the same length (first dimension)
+    lengths = []
+    for key in dict_similarity_classes_exemplars:
+        if dict_similarity_classes_exemplars[key]:  # If there are exemplars
+            exemplar = dict_similarity_classes_exemplars[key][0]
+            if hasattr(exemplar, 'shape'):
+                lengths.append((key, exemplar.shape[0]))
+
+    print("\nSequence lengths:")
+    # Print first 5 lengths for brevity
+    for key, length in lengths[:5]:
+        print(f"  Key {key}: Length {length}")
+
+    # Check if all lengths are the same
+    unique_lengths = set(length for _, length in lengths)
+    print(f"Number of unique lengths: {len(unique_lengths)}")
+    if len(unique_lengths) <= 3:  # If there are only a few unique lengths, print them all
+        print(f"Unique lengths: {unique_lengths}")
+    else:
+        print(f"Range of lengths: {min(unique_lengths)} to {max(unique_lengths)}")
+
     # Keys (sample): [(0, 0, 0, 0), (0, -1, -1, -1), (-1, 0, -1, -1), (0, 0, -1, -1), (1, 0, -1, -1)]
     # where each value is a list of a single numpy array (e.g, shape: (137, 88)) and all such tensors have been made uniform in their frame count
     #TODO: verif that we are indeed storing numpy arrays as the payload. And, given how motion units as opposed to snippets, eliminate the list use
@@ -306,16 +520,6 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     validation_data = {}
     test_data = {}
     for k, v in dict_similarity_classes_exemplars.items():
-        # start_index = random.randint(0, len(v) - train_size)
-        # Interleave the training and validation data
-        # train_data[k] = []
-        # validation_data[k] = []
-        # test_data[k] = []
-        # for i in range(0, train_size, 2):
-        #     train_data[k].append(v[i])
-        #     if i < val_and_test_size:
-        #         validation_data[k].append(v[i+1])
-        #         test_data[k].append(v[i+1])
         train_data[k] = v[:train_size]
         if val_and_test_size == 0:
             validation_data[k] = v[:train_size]
@@ -331,7 +535,7 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     }
 
 
-def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts):
+def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts, max_frame_count):
     """
     Balance the number of frames in each class exemplar to the same number of frames as the class exemplar with the
     most frames.
@@ -342,13 +546,11 @@ def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_di
     Returns:
         None
     """
-    print("OSD:: Balancing single exemplar similarity classes by frame count")
     balanced_dicts = []
-    print(f"batches::balance_exemplar_similarity_classes_by_frame_count() called ...")
     # Get the maximum frame count across all exemplars in all dictionaries
-    max_frame_count = max(
-        len(exemplar) for dict_similarity_exemplars in list_similarity_dicts for inner_list in
-        dict_similarity_exemplars.values() for exemplar in inner_list)
+    # max_frame_count = max(
+    #     len(exemplar) for dict_similarity_exemplars in list_similarity_dicts for inner_list in
+    #     dict_similarity_exemplars.values() for exemplar in inner_list)
     print(f"balance_exemplar_similarity_classes_by_frame_count: max_frame_count: {max_frame_count}")
 
     for dict_similarity_exemplars in list_similarity_dicts:
@@ -359,7 +561,7 @@ def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_di
                 count_exemplars += 1
                 print(
                     f"balance_exemplar_similarity_classes_by_frame_count: state_drive: {state_drive}, exemplar count {count_exemplars} shape: {exemplar.shape}")
-                # If the exemplar's frame count is less than the max frame count, extend it
+                # Note that exemplar is of type tensorflow.python.framework.ops.EagerTensor but gets represented as a numpy array after extending it
                 if len(exemplar) < max_frame_count:
                     last_frame = exemplar[-1]
                     additional_frames = np.repeat(last_frame[np.newaxis, :], max_frame_count - len(exemplar),

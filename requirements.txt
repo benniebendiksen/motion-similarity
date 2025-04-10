@@ -1,7 +1,14 @@
 # for pip fallback
-numpy
-pandas
-scikit-learn
-keras
-matplotlib
+numpy~=1.24.4
+pandas~=2.2.3
+scikit-learn~=1.1.2
+keras~=3.8.0
+matplotlib~=3.5.3
 pyglm
+
+tensorflow~=2.18.0
+sklearn~=0.0.post5
+scipy
+dtaidistance
+ipython~=8.5.0
+glm~=0.9.9.8
