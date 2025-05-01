@@ -55167,3 +55167,90 @@
 2025-04-03 18:03:48,153 [DEBUG   ] 27980 4352148864 pyplot: Loaded backend MacOSX version unknown.
 2025-04-03 18:05:15,865 [DEBUG   ] 28463 4381803904 pyplot: Loaded backend MacOSX version unknown.
 2025-04-03 18:06:37,327 [DEBUG   ] 28717 4339402112 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:06:37,941 [DEBUG   ] 11733 4350657920 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:06:39,928 [DEBUG   ] 11733 4350657920 ed: DTAIDistance C library not available
+2025-04-10 16:06:39,929 [DEBUG   ] 11733 4350657920 dtw: DTAIDistance C library not available
+2025-04-10 16:06:39,929 [DEBUG   ] 11733 4350657920 dtw: DTAIDistance C-OMP library not available
+2025-04-10 16:06:39,929 [DEBUG   ] 11733 4350657920 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-10 16:06:39,929 [DEBUG   ] 11733 4350657920 dtw: DTAIDistance C-Numpy library not available
+2025-04-10 16:10:44,793 [DEBUG   ] 12135 4369646976 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:19:09,669 [DEBUG   ] 12851 4376315264 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:30:00,795 [DEBUG   ] 14503 4304684416 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:32:34,952 [DEBUG   ] 14771 4383016320 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 16:37:00,286 [DEBUG   ] 15108 4343186816 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:00:46,070 [DEBUG   ] 18001 4370892160 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:07:18,960 [DEBUG   ] 18483 4336829824 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:09:35,683 [DEBUG   ] 18680 4345906560 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:17:13,811 [DEBUG   ] 19838 4374660480 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:20:32,704 [DEBUG   ] 20250 4307092864 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 17:49:04,051 [DEBUG   ] 23189 4310074752 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:05:25,472 [DEBUG   ] 24900 4372923776 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:09:30,314 [DEBUG   ] 25437 4304127360 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:12:43,282 [DEBUG   ] 25666 4347921792 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:13:39,664 [DEBUG   ] 25735 4380738944 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:20:34,567 [DEBUG   ] 26483 4306847104 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:20:35,073 [DEBUG   ] 26483 4306847104 ed: DTAIDistance C library not available
+2025-04-10 18:20:35,075 [DEBUG   ] 26483 4306847104 dtw: DTAIDistance C library not available
+2025-04-10 18:20:35,076 [DEBUG   ] 26483 4306847104 dtw: DTAIDistance C-OMP library not available
+2025-04-10 18:20:35,076 [DEBUG   ] 26483 4306847104 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-10 18:20:35,076 [DEBUG   ] 26483 4306847104 dtw: DTAIDistance C-Numpy library not available
+2025-04-10 18:29:59,658 [DEBUG   ] 27769 4348462464 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:29:59,741 [DEBUG   ] 27769 4348462464 ed: DTAIDistance C library not available
+2025-04-10 18:29:59,742 [DEBUG   ] 27769 4348462464 dtw: DTAIDistance C library not available
+2025-04-10 18:29:59,742 [DEBUG   ] 27769 4348462464 dtw: DTAIDistance C-OMP library not available
+2025-04-10 18:29:59,742 [DEBUG   ] 27769 4348462464 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-10 18:29:59,742 [DEBUG   ] 27769 4348462464 dtw: DTAIDistance C-Numpy library not available
+2025-04-10 18:31:18,415 [DEBUG   ] 27882 4378609024 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:41:40,761 [DEBUG   ] 28952 4339697024 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 18:41:41,851 [DEBUG   ] 28952 4339697024 ed: DTAIDistance C library not available
+2025-04-10 18:41:41,853 [DEBUG   ] 28952 4339697024 dtw: DTAIDistance C library not available
+2025-04-10 18:41:41,854 [DEBUG   ] 28952 4339697024 dtw: DTAIDistance C-OMP library not available
+2025-04-10 18:41:41,854 [DEBUG   ] 28952 4339697024 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-10 18:41:41,855 [DEBUG   ] 28952 4339697024 dtw: DTAIDistance C-Numpy library not available
+2025-04-10 18:47:10,919 [DEBUG   ] 29573 4367009152 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:22:57,483 [DEBUG   ] 33420 4377003392 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:23:35,066 [DEBUG   ] 33563 4382885248 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:26:49,858 [DEBUG   ] 33783 4304405888 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:27:39,221 [DEBUG   ] 33837 4347561344 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:28:11,825 [DEBUG   ] 33881 4309403008 pyplot: Loaded backend MacOSX version unknown.
+2025-04-10 19:30:25,249 [DEBUG   ] 34045 4374496640 pyplot: Loaded backend MacOSX version unknown.
+2025-04-16 14:49:32,439 [DEBUG   ] 15955 4336502144 pyplot: Loaded backend MacOSX version unknown.
+2025-04-16 14:49:34,856 [DEBUG   ] 15955 4336502144 ed: DTAIDistance C library not available
+2025-04-16 14:49:34,858 [DEBUG   ] 15955 4336502144 dtw: DTAIDistance C library not available
+2025-04-16 14:49:34,858 [DEBUG   ] 15955 4336502144 dtw: DTAIDistance C-OMP library not available
+2025-04-16 14:49:34,858 [DEBUG   ] 15955 4336502144 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-16 14:49:34,859 [DEBUG   ] 15955 4336502144 dtw: DTAIDistance C-Numpy library not available
+2025-04-16 17:54:04,264 [DEBUG   ] 34405 4382999936 pyplot: Loaded backend MacOSX version unknown.
+2025-04-16 17:54:05,583 [DEBUG   ] 34405 4382999936 ed: DTAIDistance C library not available
+2025-04-16 17:54:05,583 [DEBUG   ] 34405 4382999936 dtw: DTAIDistance C library not available
+2025-04-16 17:54:05,583 [DEBUG   ] 34405 4382999936 dtw: DTAIDistance C-OMP library not available
+2025-04-16 17:54:05,583 [DEBUG   ] 34405 4382999936 dtw: dlopen(/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so, 0x0002): Library not loaded: '/usr/local/lib/libomp.dylib'
+  Referenced from: '/Users/bendiksen/miniconda3/envs/motion-similarity/lib/python3.10/site-packages/dtaidistance/dtw_cc_omp.cpython-310-darwin.so'
+  Reason: tried: '/usr/local/lib/libomp.dylib' (no such file), '/usr/lib/libomp.dylib' (no such file)
+2025-04-16 17:54:05,583 [DEBUG   ] 34405 4382999936 dtw: DTAIDistance C-Numpy library not available
+2025-04-16 17:55:57,836 [DEBUG   ] 34892 4303897984 pyplot: Loaded backend MacOSX version unknown.
+2025-04-16 17:59:38,863 [DEBUG   ] 35531 4343563648 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 16:23:58,504 [DEBUG   ] 12650 4384245120 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 16:29:01,998 [DEBUG   ] 13678 4338140544 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 16:50:08,237 [DEBUG   ] 15987 4310877568 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 16:51:55,380 [DEBUG   ] 16195 4336649600 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:09:25,661 [DEBUG   ] 17950 4340925824 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:13:34,566 [DEBUG   ] 18302 4374152576 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:16:10,233 [DEBUG   ] 18868 4378477952 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:21:29,857 [DEBUG   ] 19523 4347102592 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:23:21,457 [DEBUG   ] 19701 4348740992 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:24:21,446 [DEBUG   ] 19844 4374840704 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:47:28,913 [DEBUG   ] 22371 4350625152 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:49:26,221 [DEBUG   ] 22724 4368729472 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:50:19,643 [DEBUG   ] 23261 4349396352 pyplot: Loaded backend MacOSX version unknown.
+2025-04-22 17:52:29,063 [DEBUG   ] 23463 4340270464 pyplot: Loaded backend MacOSX version unknown.

@@ -184,7 +184,7 @@ class SimilarityNetwork:
         self.network = self.network.to(self.device)
 
         # Print model summary
-        print(self.network)
+        # print(self.network)
 
         # Create separate loss functions with module information
         self.train_criterion = custom_losses.create_batch_triplet_loss(

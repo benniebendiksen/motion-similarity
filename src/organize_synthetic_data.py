@@ -347,13 +347,13 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
                     data_quats = _preprocess_pipeline(parsed_data)
                     # Remove root joint absolute positions if needed
                     data_quats = data_quats[:, 3:]
-                    data_velocities = _get_standardized_velocities(data_quats)
+                    # data_velocities = _get_standardized_velocities(data_quats)
                     # Stack quaternion rotations and velocities
-                    data = np.hstack((data_velocities, data_quats))
+                    data = np.hstack((data_quats, data_quats))
                 elif not rotations and velocities:
                     # Process with only velocities
                     data_quats = _preprocess_pipeline(parsed_data)
-                    data = _get_standardized_velocities(data_quats)
+                    # data = _get_standardized_velocities(data_quats)
                 else:
                     # Process with only rotations (default)
                     data_quats = _preprocess_pipeline(parsed_data)
@@ -361,16 +361,16 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
                     # Remove root joint absolute positions
                     data_quats = data_quats[:, 3:]
                     print(f"Motion matrix after removing root positions: {data_quats.shape}")
-                    data = _get_standardized_rotations(data_quats)
+                    # data = _get_standardized_rotations(data_quats)
 
                 bvh_counter += 1
 
                 # Check if data is large enough
-                if data.shape[0] < config_instance.time_series_size:
-                    assert False, f"Preprocessed file too small- {data.shape[0]} - relative to exemplar size -" \
+                if data_quats.shape[0] < config_instance.time_series_size:
+                    assert False, f"Preprocessed file too small- {data_quats.shape[0]} - relative to exemplar size -" \
                                   f" {config_instance.time_series_size}"
 
-                file_data = data
+                file_data = data_quats
                 # # Add effort values and animation type to data
                 # f_rep = np.tile(efforts_list, (data.shape[0], 1))
                 # # Add animation type as an additional column
@@ -434,23 +434,23 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     dict_similarity_classes_exemplars = pickle.load(open(file_path, "rb"))
 
     # Print information about the loaded dictionary structure
-    print(f"\nDICTIONARY STRUCTURE EXPLORATION FOR {anim_name}:")
-    print(f"Number of keys in dictionary: {len(dict_similarity_classes_exemplars)}")
+    # print(f"\nDICTIONARY STRUCTURE EXPLORATION FOR {anim_name}:")
+    # print(f"Number of keys in dictionary: {len(dict_similarity_classes_exemplars)}")
 
     # Check 2-3 example keys and their values
     sample_keys = list(dict_similarity_classes_exemplars.keys())[:3]  # Take first 3 keys for example
-    print(f"Sample keys: {sample_keys}")
+    # print(f"Sample keys: {sample_keys}")
 
     # Explore the nested structure for each sample key
     for idx, key in enumerate(sample_keys):
         exemplars = dict_similarity_classes_exemplars[key]
-        print(f"\nKey {idx + 1}: {key}")
-        print(f"  Number of exemplars: {len(exemplars)}")
+        # print(f"\nKey {idx + 1}: {key}")
+        # print(f"  Number of exemplars: {len(exemplars)}")
 
         if len(exemplars) > 0:
             # Check the type and shape of exemplars
             exemplar = exemplars[0]
-            print(f"  First exemplar type: {type(exemplar)}")
+            # print(f"  First exemplar type: {type(exemplar)}")
 
             if isinstance(exemplar, (torch.Tensor, np.ndarray, tf.Tensor)):
                 if isinstance(exemplar, torch.Tensor):
@@ -462,8 +462,8 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
                 elif isinstance(exemplar, tf.Tensor):
                     shape = exemplar.shape
                     dtype = exemplar.dtype
-                print(f"  First exemplar shape: {shape}")
-                print(f"  First exemplar dtype: {dtype}")
+                # print(f"  First exemplar shape: {shape}")
+                # print(f"  First exemplar dtype: {dtype}")
             else:
                 print(f"  First exemplar is not a tensor or array, it's: {type(exemplar)}")
 
@@ -475,10 +475,10 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
             if hasattr(exemplar, 'shape'):
                 lengths.append((key, exemplar.shape[0]))
 
-    print("\nSequence lengths:")
-    # Print first 5 lengths for brevity
-    for key, length in lengths[:5]:
-        print(f"  Key {key}: Length {length}")
+    # print("\nSequence lengths:")
+    # # Print first 5 lengths for brevity
+    # for key, length in lengths[:5]:
+    #     print(f"  Key {key}: Length {length}")
 
     # Check if all lengths are the same
     unique_lengths = set(length for _, length in lengths)
@@ -559,16 +559,16 @@ def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_di
             for i in range(len(inner_list)):
                 exemplar = inner_list[i]
                 count_exemplars += 1
-                print(
-                    f"balance_exemplar_similarity_classes_by_frame_count: state_drive: {state_drive}, exemplar count {count_exemplars} shape: {exemplar.shape}")
+                # print(
+                #     f"balance_exemplar_similarity_classes_by_frame_count: state_drive: {state_drive}, exemplar count {count_exemplars} shape: {exemplar.shape}")
                 # Note that exemplar is of type tensorflow.python.framework.ops.EagerTensor but gets represented as a numpy array after extending it
                 if len(exemplar) < max_frame_count:
                     last_frame = exemplar[-1]
                     additional_frames = np.repeat(last_frame[np.newaxis, :], max_frame_count - len(exemplar),
                                                   axis=0)
                     inner_list[i] = np.concatenate((exemplar, additional_frames), axis=0)
-                print(
-                    f"balance_exemplar_similarity_classes_by_frame_count: state_drive: {state_drive}, exemplar count {count_exemplars} final shape: {inner_list[i].shape}")
+                # print(
+                #     f"balance_exemplar_similarity_classes_by_frame_count: state_drive: {state_drive}, exemplar count {count_exemplars} final shape: {inner_list[i].shape}")
 
         # Verify that all exemplars now have the same frame count
         count = 0

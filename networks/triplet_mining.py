@@ -26,6 +26,13 @@ class TripletMining:
         self.matrix_bool_right_neut = None
         self.matrix_bool_neut_right = None
 
+        self.matrix_comparison_values_left_right = None
+        self.matrix_comparison_values_left_neut = None
+        self.matrix_comparison_values_right_neut = None
+        self.matrix_comparison_bool_left_right = None
+        self.matrix_comparison_bool_left_neut = None
+        self.matrix_comparison_bool_right_neut = None
+
         self.num_states_drives = 0
         self.tensor_dists_left_right_right_left = None
         self.tensor_dists_class_neut = None
@@ -63,45 +70,11 @@ class TripletMining:
         """
 
         print("Initializing Triplet Mining module state variables")
-        # self.dict_similarity_classes_exemplars = pickle.load(open(
-        #     self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
-        # print(f"classes: {self.dict_similarity_classes_exemplars.keys()}")
-        #
-        # key_to_remove = (0, 0, 0, 0)
-        # if key_to_remove not in self.dict_similarity_classes_exemplars:
-        #     assert False, f"triplet_mining.py: Key '{key_to_remove}' not found in dict_similarity_classes_exemplars"
-        # if self.bool_drop_neutral_exemplar:
-        #     _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
-        #     print(f"Removed key '{key_to_remove}' from dict_similarity_classes_exemplars")
-        #     self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
-        # else:
-        #     self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
-        # print(f"triplet_mining:init: loaded: {self.num_states_drives} states + drives")
-        #
-        # # Initialize matrices as PyTorch tensors
-        # (self.matrix_alpha_left_right_right_left,
-        #  self.matrix_alpha_left_neut_neut_left,
-        #  self.matrix_alpha_right_neut_neut_right,
-        #  self.matrix_bool_left_right,
-        #  self.matrix_bool_right_left,
-        #  self.matrix_bool_left_neut,
-        #  self.matrix_bool_neut_left,
-        #  self.matrix_bool_right_neut,
-        #  self.matrix_bool_neut_right) = [
-        #     torch.zeros((self.num_states_drives, self.num_states_drives), dtype=torch.float32, requires_grad=False)
-        #     for _ in range(9)
-        # ]
-        #
-        # self.tensor_dists_class_neut = tf.Variable(initial_value=tf.zeros((self.num_states_drives,)))
-        # self.neutral_embedding = tf.Variable(initial_value=tf.zeros((self.config.embedding_size,)))
-        # self.subset_global_dict()
-        # self.pre_process_comparisons_data(anim_name)
-
 
         # Load the full dictionary
         self.dict_similarity_classes_exemplars = pickle.load(open(
             self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
-        print(f"Full dictionary classes: {len(self.dict_similarity_classes_exemplars.keys())}")
+        # print(f"Full dictionary classes: {len(self.dict_similarity_classes_exemplars.keys())}")
 
         # If valid_indices is provided, subset the dictionary
         if self.valid_indices is not None:
@@ -132,7 +105,7 @@ class TripletMining:
         else:
             self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
 
-        print(f"triplet_mining:init: using {self.num_states_drives} states + drives for this module")
+        # print(f"triplet_mining:init: using {self.num_states_drives} states + drives for this module")
 
         # Now initialize matrices with the correct size based on actual num_states_drives
         (self.matrix_alpha_left_right_right_left,
@@ -146,6 +119,16 @@ class TripletMining:
          self.matrix_bool_neut_right) = [
             torch.zeros((self.num_states_drives, self.num_states_drives), dtype=torch.float32, requires_grad=False)
             for _ in range(9)
+        ]
+
+        (self.matrix_comparison_values_left_right,
+         self.matrix_comparison_values_left_neut,
+         self.matrix_comparison_values_right_neut,
+         self.matrix_comparison_bool_left_right,
+         self.matrix_comparison_bool_left_neut,
+         self.matrix_comparison_bool_right_neut) = [
+            torch.zeros((self.num_states_drives, self.num_states_drives), dtype=torch.float32, requires_grad=False)
+            for _ in range(6)
         ]
 
         # Initialize tensor_dists_class_neut with the correct size
@@ -167,7 +150,7 @@ class TripletMining:
         """
         dict_label_to_id = {class_label: idx for idx, class_label in
                             enumerate(self.dict_similarity_classes_exemplars.keys())}
-        print(dict_label_to_id)
+        # print(dict_label_to_id)
 
     # def extract_neutral_embedding(embeddings):
     #     """
@@ -206,6 +189,64 @@ class TripletMining:
 
         return neutral_embedding, modified_embeddings
 
+    def calculate_distances(self, embeddings):
+        """
+        Calculate both:
+        1. 1D tensor of distances between class embeddings and the neutral embedding
+        2. 2D matrix of distances between all class embeddings
+        """
+        try:
+            # Determine neutral and modified embeddings
+            if self.bool_fixed_neutral_embedding:
+                neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
+            else:
+                neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
+
+            # Calculate left-right distances between all embeddings
+            # Compute the dot product
+            dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
+
+            # Compute the squared norms
+            square_norm = torch.sum(modified_embeddings ** 2, dim=1)
+
+            # Compute pairwise squared Euclidean distances
+            left_right_distances = square_norm.unsqueeze(1) + square_norm.unsqueeze(0) - 2.0 * dot_product
+
+            # Clamp to ensure no negative distances due to floating-point errors
+            left_right_distances = torch.clamp(left_right_distances, min=0.0)
+
+            if not self.squared_left_right_euc_dist:
+                # For non-squared distances, compute square root with epsilon for stability
+                epsilon = 1e-12
+                left_right_distances = torch.sqrt(left_right_distances + epsilon)
+
+            # Calculate class-neutral distances using similar approach to left-right distances
+            # Compute squared norm of neutral embedding
+            neutral_square_norm = torch.sum(neutral_embedding ** 2)
+
+            # Compute the dot product between modified embeddings and neutral embedding
+            neutral_dot_product = torch.matmul(modified_embeddings, neutral_embedding)
+
+            # Compute squared distances using the same formula as left-right
+            class_neut_squared_dist = square_norm + neutral_square_norm - 2.0 * neutral_dot_product
+
+            # Clamp to ensure no negative distances due to floating-point errors
+            class_neut_squared_dist = torch.clamp(class_neut_squared_dist, min=0.0)
+
+            # Apply sqrt if squared_class_neut_dist is True (notice this is inverted compared to left-right!)
+            # This matches your observation about what works well for training
+            if self.squared_class_neut_dist:
+                epsilon = 1e-12
+                self.tensor_dists_class_neut = torch.sqrt(class_neut_squared_dist + epsilon)
+            else:
+                self.tensor_dists_class_neut = class_neut_squared_dist
+
+            return left_right_distances
+
+        except Exception as e:
+            print(f"Error in calculate_distances: {e}")
+            raise e
+
     def calculate_left_right_distances(self, embeddings):
         """Compute the 2D matrix of distances between all 56 class embeddings."""
 
@@ -213,6 +254,17 @@ class TripletMining:
             _neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
         else:
             _neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
+
+        # print embeddings shape
+        # print(f"Modified embeddings shape: {modified_embeddings.shape}")
+        # print(f"Modified embeddings type: {type(modified_embeddings)}")
+        # print(f"Neutral embedding shape: {_neutral_embedding.shape}")
+        # print(f"Neutral embedding type: {type(_neutral_embedding)}")
+        # Modified embeddings shape: torch.Size([45, 32])
+        # Modified embeddings type: <class 'torch.Tensor'>
+        # Neutral embedding shape: torch.Size([32])
+        # Neutral embedding type: <class 'torch.Tensor'>
+
 
         # Compute the dot product
         dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
@@ -235,43 +287,6 @@ class TripletMining:
         else:
             # Return squared distances
             return distances
-
-    # def calculate_left_right_distances(self, embeddings):
-    #     """Compute the 2D matrix of distances between all 56 class embeddings."""
-    #
-    #     if self.bool_fixed_neutral_embedding:
-    #         _neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
-    #     else:
-    #         _neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
-    #
-    #     # Compute the dot product
-    #     dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
-    #
-    #     # Compute the squared norms
-    #     square_norm = torch.diagonal(dot_product)
-    #
-    #     # Compute pairwise squared Euclidean distances
-    #     distances = square_norm.unsqueeze(1) - 2.0 * dot_product + square_norm.unsqueeze(0)
-    #
-    #     # Clamp to ensure no negative distances due to floating-point errors
-    #     distances = torch.clamp(distances, min=0.0)
-    #
-    #     if not self.squared_left_right_euc_dist:
-    #         # Add small epsilon to avoid sqrt(0) issues
-    #         mask = distances == 0.0
-    #         distances = distances + mask.float() * 1e-16
-    #
-    #         # Ensure numerical stability for sqrt
-    #         distances = torch.sqrt(torch.clamp(distances, min=1e-16))
-    #
-    #         # Reset distances where mask is True back to zero
-    #         distances[mask] = 0.0
-    #
-    #         # Check for NaNs or Infs
-    #         if torch.isnan(distances).any() or torch.isinf(distances).any():
-    #             raise ValueError("NaN or Inf values found in distances")
-    #
-    #     return distances
 
     def calculate_class_neut_distances(self, embeddings):
         """
@@ -340,7 +355,7 @@ class TripletMining:
 
             This method analyzes triplets of comparisons (groups of 3 rows) from the input DataFrame 'df_comparisons',
             where each triplet contains all possible pairwise comparisons between three options (typically labeled as 0, 1, 2,
-            representing left agent, neutral, and right agent). For each triplet, it:
+            representing left agent, neutral, and right agent, respectively). For each triplet, it:
 
             1. Identifies the most preferred pair (highest count_normalized value)
             2. Extracts the direct comparison value between options 0 and 2 when available
@@ -384,8 +399,10 @@ class TripletMining:
             df_comparisons['alpha_1_0'] = 0.0
             df_comparisons['alpha_1_2'] = 0.0
 
-            # Add new column for the "correct" count_normalized (where selected0=0, selected1=2)
+            # Add new column for the 0-2 count_normalized (where selected0=0, selected1=2)
             df_comparisons['direct_comparison_value'] = np.nan
+
+            self.df_comparisons = df_comparisons
 
             # Iterate over three consecutive rows
             # selected_0 is either 0 (agent left) or 1 (neutral) and selected_1 is either 1 or 2 (agent right) (else we terminate)
@@ -410,7 +427,7 @@ class TripletMining:
                 # find the anchor_positive ratio value under the cases in which anchor is each of the positive pair,
                 # respectively, and positive is the negative class
                 if max_selected_0 == 0:
-                    # means either 0-2 ratio if max_selected_1 is 1, else 0-1 ratio
+                    # means either 0-2 ratio if max_selected_1 is 1 (i.e., 2 is negative), else 0-1 ratio
                     ratio_positive_1_negative = \
                         group.loc[(group['selected0'] == max_selected_0) & (group['selected1'] ==
                                                                             negative_index)].iloc[0][
@@ -448,7 +465,7 @@ class TripletMining:
                 else:
                     assert False, "selected0 is not 0 or 1"
 
-                # Alternatively to generating the two possible alpha values for a comparison (i.e., treating selected0 as anchor versus
+                # Alternatively to generating the two possible alpha values for a comparison (e.g., treating selected0 as anchor versus
                 # treating selected1 as anchor), we can extract only the dominant alpha value for each comparison (i.e., max difference).
                 diff_positive_1_anchor = max_row['count_normalized'] - ratio_positive_1_negative
                 diff_positive_2_anchor = max_row['count_normalized'] - ratio_positive_2_negative
@@ -483,8 +500,11 @@ class TripletMining:
             #     # Optionally, you can also rename the column to something more descriptive
             #     alpha_dataframes.rename(columns={'direct_comparison_value': 'direct_02_comparison'}, inplace=True)
 
-            self.alpha_dataframes = alpha_dataframes
             return alpha_dataframes
+
+        def _populate_comparison_values_matrices(df_comparisons):
+            # We must grab count_normalized values for the left-right, left-neut, and right-neut comparisons
+            pass
 
         def _populate_alpha_matrices_and_masks(df_alphas):
             """
@@ -687,7 +707,7 @@ class TripletMining:
         aux_folder_path = (Path(__file__) / '../../aux').resolve()
         csv_similarity_ratios_path = aux_folder_path / f'{anim_name}_similarity_comparisons_ratios.csv'
         df_comparisons = pd.read_csv(csv_similarity_ratios_path)
-        print(f"Shape of df_comparisons: {df_comparisons.shape}")
+        # print(f"Shape of df_comparisons: {df_comparisons.shape}")
         # Split the efforts_tuples values at the delimiter '_' and convert tokens to tuples
         df_comparisons['efforts_tuples'] = df_comparisons['efforts_tuples'].apply(
             lambda x: [tuple(ast.literal_eval(token)) for token in x.split('_')])
@@ -705,9 +725,10 @@ class TripletMining:
                             enumerate(dict_similarity_classes_exemplars.keys())}
         dict_id_to_label = {idx: class_label for idx, class_label in
                             enumerate(dict_similarity_classes_exemplars.keys())}
-        print(f"reduced dict label to id len: {len(dict_label_to_id)}")
-        print(f"k,v of dict id to label: {dict_id_to_label.items()}")
+        # print(f"reduced dict label to id len: {len(dict_label_to_id)}")
+        # print(f"k,v of dict id to label: {dict_id_to_label.items()}")
         # verify_comparison_data()
         df_alphas = _generate_df_alphas()
         _populate_alpha_matrices_and_masks(df_alphas)
-        print(f"type of matrix_bool_left_right: {type(self.matrix_bool_left_right)}")
+        _populate_comparison_values_matrices(df_comparisons)
+        # print(f"type of matrix_bool_left_right: {type(self.matrix_bool_left_right)}") -> class 'torch.Tensor

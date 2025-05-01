@@ -194,14 +194,14 @@ def compare_distance_inverse_comparison_value_relationships(embedding_distances,
     return results
 
 
-def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_modules, get_alpha_value_func):
+def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_modules, get_inverse_comparison_value_func):
     """
     Collect distance and inverse comparison values from distance tuples.
 
     Args:
         distance_tuples: List of tuples (distance, key1, key2)
         triplet_modules: Triplet module object or list of triplet module objects
-        get_alpha_value_func: Function to get inverse comparison value for a pair of keys
+        get_inverse_comparison_value_func: Function to get inverse comparison value for a pair of keys
 
     Returns:
         tuple: (distances, inverse_comparison_values)
@@ -210,7 +210,7 @@ def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_mod
     alphas = []
 
     for distance, key1, key2 in distance_tuples:
-        alpha_value = get_alpha_value_func(key1, key2, triplet_modules)
+        alpha_value = get_inverse_comparison_value_func(key1, key2, triplet_modules)
         distances.append(distance)
         alphas.append(alpha_value)
 
@@ -381,6 +381,56 @@ def get_raw_features_without_dataloader(anim_name, config):
     return raw_features
 
 
+# def calculate_pairwise_distances(embeddings):
+#     """
+#     Calculate pairwise squared Euclidean distances between all embeddings.
+#
+#     Args:
+#         embeddings: Dictionary mapping (action_type, effort_tuple) to embedding vectors
+#
+#     Returns:
+#         List of tuples (squared_distance, key1, key2) sorted by squared distance in ascending order
+#     """
+#     print("Calculating pairwise squared L2 distances for embeddings...")
+#     distances = []
+#     embedding_keys = list(embeddings.keys())
+#     total_pairs = len(embedding_keys) * (len(embedding_keys) - 1) // 2
+#
+#     print(f"Processing {total_pairs} pairs across {len(embedding_keys)} embeddings")
+#
+#     # Optional: Track progress
+#     progress_interval = max(1, total_pairs // 20)  # Show progress 20 times
+#     pair_count = 0
+#     start_time = time.time()
+#
+#     for i in range(len(embedding_keys)):
+#         for j in range(i + 1, len(embedding_keys)):
+#             key1 = embedding_keys[i]
+#             key2 = embedding_keys[j]
+#
+#             # Calculate squared Euclidean distance
+#             embedding1 = embeddings[key1]
+#             embedding2 = embeddings[key2]
+#             # Use sum of squared differences instead of norm
+#             squared_distance = np.sum((embedding1 - embedding2) ** 2)
+#
+#             # Store as tuple (squared_distance, key1, key2)
+#             distances.append((squared_distance, key1, key2))
+#
+#             # Update progress
+#             pair_count += 1
+#             if pair_count % progress_interval == 0:
+#                 elapsed = time.time() - start_time
+#                 percent = (pair_count / total_pairs) * 100
+#                 # print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
+#
+#     # Sort by squared distance (ascending)
+#     distances.sort()
+#     print(f"Calculated {len(distances)} squared L2 distances")
+#
+#     return distances
+
+
 def calculate_pairwise_distances(embeddings):
     """
     Calculate pairwise Euclidean distances between all embeddings.
@@ -421,7 +471,7 @@ def calculate_pairwise_distances(embeddings):
             if pair_count % progress_interval == 0:
                 elapsed = time.time() - start_time
                 percent = (pair_count / total_pairs) * 100
-                print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
+                # print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
 
     # Sort by distance (ascending)
     distances.sort()
@@ -429,76 +479,91 @@ def calculate_pairwise_distances(embeddings):
 
     return distances
 
-
 def compute_geodesic_distances(dict_raw_features):
-    """
-    Compute pairwise geodesic distances between multiple quaternion samples.
+    # First, preprocess and normalize all quaternions in the dictionary
+    normalized_features = {}
+    print("Preprocessing: Normalizing all quaternions...")
 
-    Args:
-        dict_raw_features (dict): Dictionary mapping (action_type, effort_tuple)
-                                to raw quaternion motion data.
-
-    Returns:
-        List of tuples (distance, key1, key2) sorted by distance in ascending order.
-    """
-    keys = list(dict_raw_features.keys())
-    num_samples = len(keys)
     num_frames = 137  # Standard frame count
-    num_joints = 28   # Standard joint count
+    num_joints = 28  # Standard joint count
+
+    # Move this OUTSIDE the main loop - check a few samples first
+    for key in list(dict_raw_features.keys())[:3]:  # Check first 3 samples
+        sample = dict_raw_features[key]
+        if isinstance(sample, list) and len(sample) > 0:
+            sample = sample[0]
+        if isinstance(sample, tf.Tensor):
+            sample = sample.numpy()
+
+        reshaped = sample.reshape(num_frames, num_joints, 4)
+        norms = np.sqrt(np.sum(reshaped ** 2, axis=-1))
+
+        # print(f"Quaternion norms for {key}:")
+        # print(f"  Min norm: {np.min(norms):.6f}")
+        # print(f"  Max norm: {np.max(norms):.6f}")
+        # print(f"  Mean norm: {np.mean(norms):.6f}")
+        # print(f"  Std norm: {np.std(norms):.6f}")
+
+    # Now process all quaternions
+    for key, sample in dict_raw_features.items():
+        # Handle list case
+        if isinstance(sample, list) and len(sample) > 0:
+            sample = sample[0]
+
+        # Convert to numpy if needed
+        if isinstance(sample, tf.Tensor):
+            sample = sample.numpy()
+        elif not isinstance(sample, np.ndarray):
+            raise Exception(f"Sample is not a tf.Tensor or np.ndarray but: {type(sample)}")
+
+        # Reshape to (137, 28, 4)
+        reshaped = sample.reshape(num_frames, num_joints, 4)
+
+        # # Compute norms and normalize
+        # norms = np.sqrt(np.sum(reshaped ** 2, axis=-1, keepdims=True))
+        # normalized = reshaped / (norms + 1e-10)  # Add epsilon to avoid division by zero
+
+        # Store the normalized version
+        normalized_features[key] = reshaped
+
+    print(f"Normalized quaternions for {len(normalized_features)} samples")
+
+    # Now compute distances using the normalized quaternions
+    keys = list(normalized_features.keys())
+    num_samples = len(keys)
 
     distances = []
-    total_pairs = num_samples * (num_samples - 1) // 2  # Total pairwise comparisons
-    progress_interval = max(1, total_pairs // 10)  # Show progress 10 times
+    total_pairs = num_samples * (num_samples - 1) // 2
+    progress_interval = max(1, total_pairs // 10)
     pair_count = 0
     start_time = time.time()
 
-    print(f"Computing geodesic distances for {total_pairs} pairs across {num_samples} samples...")
+    print(f"Computing geodesic distances for {total_pairs} pairs using normalized quaternions...")
 
     for i, j in combinations(range(num_samples), 2):
         key1 = keys[i]
         key2 = keys[j]
 
-        # Get quaternion data
-        sample_i = dict_raw_features[key1]
-        sample_j = dict_raw_features[key2]
-
-        # If it's a list with one element (from the similarity dict), take the first element
-        if isinstance(sample_i, list) and len(sample_i) > 0:
-            sample_i = sample_i[0]
-
-        if isinstance(sample_j, list) and len(sample_j) > 0:
-            sample_j = sample_j[0]
-
-        # Convert to numpy for compatibility
-        if isinstance(sample_i, tf.Tensor):
-            sample_i = sample_i.numpy()
-        elif not isinstance(sample_i, np.ndarray):
-            raise Exception(f"sample_i is not a tf.Tensor or np.ndarray but: {type(sample_i)}")
-
-        if isinstance(sample_j, tf.Tensor):
-            sample_j = sample_j.numpy()
-        elif not isinstance(sample_j, np.ndarray):
-            raise Exception(f"sample_j is not a tf.Tensor or np.ndarray but: {type(sample_j)}")
-
-        # Reshape to (137, 28, 4) for quaternion operations
-        q1 = sample_i.reshape(num_frames, num_joints, 4)
-        q2 = sample_j.reshape(num_frames, num_joints, 4)
+        # Get normalized quaternion data
+        q1 = normalized_features[key1]
+        q2 = normalized_features[key2]
 
         # Compute geodesic distances for all frames and joints
-        distances_per_joint = 2 * np.arccos(np.clip(np.abs(np.sum(q1 * q2, axis=2)), -1.0, 1.0))  # Shape: (137, 28)
-        mean_distance = np.mean(distances_per_joint)  # Aggregate over frames and joints
+        # Note: No need to normalize again since they're already normalized
+        distances_per_joint = 2 * np.arccos(np.clip(np.abs(np.sum(q1 * q2, axis=-1)), -1.0, 1.0))
+        mean_distance = np.mean(distances_per_joint)
 
         # Store the result
         distances.append((mean_distance, key1, key2))
 
         # Update progress
-        pair_count += 1
-        if pair_count % progress_interval == 0:
-            elapsed = time.time() - start_time
-            percent = (pair_count / total_pairs) * 100
-            eta = (elapsed / pair_count) * (total_pairs - pair_count) if pair_count > 0 else 0
-            print(
-                f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s - ETA: {eta:.1f}s")
+        # pair_count += 1
+        # if pair_count % progress_interval == 0:
+        #     elapsed = time.time() - start_time
+        #     percent = (pair_count / total_pairs) * 100
+        #     eta = (elapsed / pair_count) * (total_pairs - pair_count) if pair_count > 0 else 0
+        #     print(
+        #         f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s - ETA: {eta:.1f}s")
 
     # Sort by distance (ascending)
     distances.sort()
@@ -565,12 +630,12 @@ def calculate_real_variable_length_dtw(dict_raw_features):
                 continue
 
             # Update progress
-            pair_count += 1
-            if pair_count % progress_interval == 0:
-                elapsed = time.time() - start_time
-                percent = (pair_count / total_pairs) * 100
-                eta = (elapsed / pair_count) * (total_pairs - pair_count) if pair_count > 0 else 0
-                print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s - ETA: {eta:.1f}s")
+            # pair_count += 1
+            # if pair_count % progress_interval == 0:
+            #     elapsed = time.time() - start_time
+            #     percent = (pair_count / total_pairs) * 100
+            #     eta = (elapsed / pair_count) * (total_pairs - pair_count) if pair_count > 0 else 0
+            #     print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s - ETA: {eta:.1f}s")
 
     # Sort by distance (ascending)
     distances.sort()
@@ -619,6 +684,10 @@ def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
             pair_match = df[df['efforts_tuples'].apply(lambda x:
                                                        set(x) == set([effort1, effort2]) if isinstance(x,
                                                                                                        list) else False)]
+            # print(f"Pair match found: {pair_match}")
+            if pair_match.iloc[0]['selected0'] == 1 or pair_match.iloc[0]['selected1'] == 1:
+                return None
+
             if not pair_match.empty:
                 row = pair_match.iloc[0]
 
@@ -629,34 +698,52 @@ def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
 
             return None
 
+            # df = module.df_comparisons
+            # pair_match = df[df['efforts_tuples'].apply(lambda x:
+            #                                            set(x) == set([effort1, effort2]) if isinstance(x,
+            #                                                                                            list) else False)]
+            # if not pair_match.empty:
+            #     row = pair_match.iloc[0]
+            #
+            #     # Check if we have a direct comparison value
+            #     if 'count_normalized' in row and not pd.isna(row['count_normalized']):
+            #         # Return 1 minus the comparison value
+            #         return 1 - row['count_normalized']
+
+            return None
+
     return None
 
 
 def main():
     """
-    Main execution function that analyzes each animation type separately:
-    1. Load and process data for the animation type
-    2. Generate embeddings using a trained neural network
-    3. Extract variable-length raw features directly from pickle files
-    4. Calculate L2 distances for embeddings and geodesic distances for raw features
-    5. Analyze which approach better correlates with human perception
+    Main execution function that analyzes each animation type separately
+    and then performs an overall analysis across all animations.
     """
     # Initialize configuration
     config = Config()
 
     # Set up paths and model parameters
     architecture_variant = 0
+    #checkpoint_path = os.path.join(config.checkpoint_root_dir,
+    #                               f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_200.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False
     squared_left_right_euc_dist = False
-    squared_class_neut_euc_dist = True
+    squared_class_neut_euc_dist = False
 
     # Animation types to process
     animations = ["walking", "pointing", "picking"]
 
+    # Create containers for aggregated results
+    all_embeddings = {}
+    all_raw_features = {}
+    all_triplet_modules = []
+
+    # Process each animation individually
     for anim_name in animations:
         print(f"\n{'=' * 70}")
         print(f"PROCESSING ANIMATION: {anim_name.upper()}")
@@ -675,7 +762,8 @@ def main():
             squared_class_neut_euc_dist,
             config
         )
-        print(f"Created triplet module for {anim_name}")
+        # print(f"Created triplet module for {anim_name}")
+        all_triplet_modules.append(triplet_module)  # Store for overall analysis
 
         # PART 2: Load data and generate embeddings
         print("\n2. LOADING DATA AND GENERATING EMBEDDINGS")
@@ -699,12 +787,20 @@ def main():
         model = load_model(checkpoint_path, architecture_variant, config, balanced_data_loader, triplet_module)
 
         # Generate embeddings
-        embeddings = generate_embeddings_from_dataloader(model, balanced_data_loader, balanced_anim_similarity_dict, anim_name)
+        embeddings = generate_embeddings_from_dataloader(model, balanced_data_loader, balanced_anim_similarity_dict,
+                                                         anim_name)
 
         # PART 3: Extract raw features
         print("\n3. EXTRACTING RAW FEATURES")
         print("-" * 50)
         raw_features = get_raw_features_without_dataloader(anim_name, config)
+
+        # Store embeddings and raw features for overall analysis
+        for key, value in embeddings.items():
+            all_embeddings[key] = value
+
+        for key, value in raw_features.items():
+            all_raw_features[key] = value
 
         # PART 4: Calculate distances
         print("\n4. CALCULATING DISTANCES")
@@ -736,7 +832,6 @@ def main():
 
         print(f"Found {valid_embedding_pairs} embedding pairs with human ratings")
         print(f"Found {valid_geo_pairs} geodesic pairs with human ratings")
-
         # Compare relationship between distances and human perception
         comparison_results = compare_distance_inverse_comparison_value_relationships(
             embedding_dist, embedding_inverse_comparison_values,
@@ -752,8 +847,236 @@ def main():
 
         # Print concise conclusion
         print("\n" + "=" * 70)
-        print(f"CONCLUSION FOR {anim_name.upper()}: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
+        print(
+            f"CONCLUSION FOR {anim_name.upper()}: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
         print("=" * 70)
+
+    # OVERALL ANALYSIS ACROSS ALL ANIMATIONS
+    print(f"\n{'=' * 70}")
+    print(f"OVERALL ANALYSIS ACROSS ALL ANIMATIONS")
+    print(f"{'=' * 70}")
+    print(f"This analysis combines the results from individual animation analyses")
+    print(f"(No cross-animation pairs are included since human comparisons only exist within animations)\n")
+
+    # Combine the valid pairs from each individual analysis instead of recomputing
+    combined_emb_dist = []
+    combined_emb_alphas = []
+    combined_geo_dist = []
+    combined_geo_alphas = []
+
+    # For each animation, collect the per-animation results
+    for anim_name in animations:
+        # Recreate the necessary objects to get the pairs
+        triplet_module = create_triplet_module(
+            anim_name,
+            bool_drop_neutral_exemplar,
+            bool_fixed_neutral_embedding,
+            squared_left_right_euc_dist,
+            squared_class_neut_euc_dist,
+            config
+        )
+
+        # Load similarity data for this animation
+        anim_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, anim_name, config)
+        original_anim_similarity_dict = anim_similarity_dict_partition["train"]
+
+        # Create a balanced copy for embedding generation
+        balanced_anim_similarity_dict = dict(original_anim_similarity_dict)  # Deep copy
+        balanced_anim_similarity_dict = osd.balance_single_exemplar_similarity_classes_by_frame_count(
+            [balanced_anim_similarity_dict], 137)[0]
+
+        # Extract embeddings and raw features for this animation only
+        anim_embeddings = {k: v for k, v in all_embeddings.items() if k[0] == anim_name}
+        anim_raw_features = {k: v for k, v in all_raw_features.items() if k[0] == anim_name}
+
+        # Calculate distances within this animation
+        anim_embedding_distances = calculate_pairwise_distances(anim_embeddings)
+        anim_geodesic_distances = compute_geodesic_distances(anim_raw_features)
+
+        # Collect distances and corresponding inverse comparison values
+        anim_emb_dist, anim_emb_alphas = collect_distance_inverse_comparison_value_pairs(
+            anim_embedding_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        anim_geo_dist, anim_geo_alphas = collect_distance_inverse_comparison_value_pairs(
+            anim_geodesic_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        # Add the valid pairs (filtering out None values)
+        for i, alpha in enumerate(anim_emb_alphas):
+            if alpha is not None:
+                combined_emb_dist.append(anim_emb_dist[i])
+                combined_emb_alphas.append(alpha)
+
+        for i, alpha in enumerate(anim_geo_alphas):
+            if alpha is not None:
+                combined_geo_dist.append(anim_geo_dist[i])
+                combined_geo_alphas.append(alpha)
+
+    # Count valid pairs (with human ratings)
+    print(f"Combined {len(combined_emb_alphas)} embedding pairs with human ratings")
+    print(f"Combined {len(combined_geo_alphas)} geodesic pairs with human ratings")
+
+    # Debug: Print sample pairs from the combined data
+    print("\nDEBUG - Sample pairs in combined analysis:")
+    for i in range(min(5, len(combined_emb_dist))):
+        print(f"Embedding pair {i}: distance={combined_emb_dist[i]:.6f}, alpha={combined_emb_alphas[i]:.6f}")
+
+    for i in range(min(5, len(combined_geo_dist))):
+        print(f"Geodesic pair {i}: distance={combined_geo_dist[i]:.6f}, alpha={combined_geo_alphas[i]:.6f}")
+
+    # Compare relationship between distances and human perception
+    comparison_results = compare_distance_inverse_comparison_value_relationships(
+        combined_emb_dist, combined_emb_alphas,
+        combined_geo_dist, combined_geo_alphas,
+        method="geodesic"
+    )
+
+    # Print final overall analysis results
+    print("\n" + "=" * 70)
+    print("FINAL OVERALL ANALYSIS: EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
+    print("=" * 70 + "\n")
+    print(comparison_results['output_text'])
+
+    # Print concise conclusion
+    print("\n" + "=" * 70)
+    print(
+        f"OVERALL CONCLUSION: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception across all animations")
+    print("=" * 70)
+
+# def main():
+#     """
+#     Main execution function that analyzes each animation type separately:
+#     1. Load and process data for the animation type
+#     2. Generate embeddings using a trained neural network
+#     3. Extract variable-length raw features directly from pickle files
+#     4. Calculate L2 distances for embeddings and geodesic distances for raw features
+#     5. Analyze which approach better correlates with human perception
+#     """
+#     # Initialize configuration
+#     config = Config()
+#
+#     # Set up paths and model parameters
+#     architecture_variant = 0
+#     checkpoint_path = os.path.join(config.checkpoint_root_dir,
+#                                    f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
+#
+#     bool_drop_neutral_exemplar = False
+#     bool_fixed_neutral_embedding = False
+#     squared_left_right_euc_dist = False
+#     squared_class_neut_euc_dist = True
+#
+#     # Animation types to process
+#     animations = ["walking", "pointing", "picking"]
+#
+#     for anim_name in animations:
+#         print(f"\n{'=' * 70}")
+#         print(f"PROCESSING ANIMATION: {anim_name.upper()}")
+#         print(f"{'=' * 70}")
+#         print(f"This analysis will evaluate which distance metric better correlates with human perception")
+#         print(f"for the {anim_name} animation type.\n")
+#
+#         # PART 1: Create triplet module for this animation
+#         print("\n1. CREATING TRIPLET MODULE")
+#         print("-" * 50)
+#         triplet_module = create_triplet_module(
+#             anim_name,
+#             bool_drop_neutral_exemplar,
+#             bool_fixed_neutral_embedding,
+#             squared_left_right_euc_dist,
+#             squared_class_neut_euc_dist,
+#             config
+#         )
+#         print(f"Created triplet module for {anim_name}")
+#
+#         # PART 2: Load data and generate embeddings
+#         print("\n2. LOADING DATA AND GENERATING EMBEDDINGS")
+#         print("-" * 50)
+#
+#         # Load similarity data for this animation
+#         anim_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, anim_name, config)
+#
+#         # Store original dictionary for raw feature extraction
+#         original_anim_similarity_dict = anim_similarity_dict_partition["train"]
+#
+#         # Create a balanced copy for embedding generation
+#         balanced_anim_similarity_dict = dict(original_anim_similarity_dict)  # Deep copy
+#         balanced_anim_similarity_dict = osd.balance_single_exemplar_similarity_classes_by_frame_count(
+#             [balanced_anim_similarity_dict], 137)[0]
+#
+#         # Create dataloader for the balanced dictionary
+#         balanced_data_loader = SimilarityDataLoader([balanced_anim_similarity_dict], config, False)
+#
+#         # Load model
+#         model = load_model(checkpoint_path, architecture_variant, config, balanced_data_loader, triplet_module)
+#
+#         # Generate embeddings
+#         embeddings = generate_embeddings_from_dataloader(model, balanced_data_loader, balanced_anim_similarity_dict, anim_name)
+#
+#         # PART 3: Extract raw features
+#         print("\n3. EXTRACTING RAW FEATURES")
+#         print("-" * 50)
+#         raw_features = get_raw_features_without_dataloader(anim_name, config)
+#
+#         # PART 4: Calculate distances
+#         print("\n4. CALCULATING DISTANCES")
+#         print("-" * 50)
+#
+#         # Calculate L2 distances for embeddings
+#         embedding_distances = calculate_pairwise_distances(embeddings)
+#
+#         # Calculate geodesic distances for raw features
+#         geodesic_distances = compute_geodesic_distances(raw_features)
+#
+#         # PART 5: Analyze relationships with human perception
+#         print("\n5. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION")
+#         print("-" * 50)
+#
+#         # Collect distances and corresponding inverse comparison values
+#         print("\nCollecting distance and inverse comparison value pairs...")
+#         embedding_dist, embedding_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+#             embedding_distances, triplet_module, get_inverse_direct_comparison_value
+#         )
+#
+#         geo_dist, geo_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+#             geodesic_distances, triplet_module, get_inverse_direct_comparison_value
+#         )
+#
+#         # Count valid pairs (with human ratings)
+#         valid_embedding_pairs = sum(1 for v in embedding_inverse_comparison_values if v is not None)
+#         valid_geo_pairs = sum(1 for v in geo_inverse_comparison_values if v is not None)
+#
+#         print(f"Found {valid_embedding_pairs} embedding pairs with human ratings")
+#         print(f"Found {valid_geo_pairs} geodesic pairs with human ratings")
+#
+#         # Debug: Print first 5 pairs to verify distances
+#         print("\nDEBUG - Sample distance pairs going into analysis:")
+#         for i in range(min(5, len(embedding_dist))):
+#             if embedding_inverse_comparison_values[i] is not None:
+#                 print(
+#                     f"Embedding pair {i}: distance={embedding_dist[i]:.6f}, alpha={embedding_inverse_comparison_values[i]:.6f}")
+#
+#         for i in range(min(5, len(geo_dist))):
+#             if geo_inverse_comparison_values[i] is not None:
+#                 print(f"Geodesic pair {i}: distance={geo_dist[i]:.6f}, alpha={geo_inverse_comparison_values[i]:.6f}")
+#
+#         # Compare relationship between distances and human perception
+#         comparison_results = compare_distance_inverse_comparison_value_relationships(
+#             embedding_dist, embedding_inverse_comparison_values,
+#             geo_dist, geo_inverse_comparison_values,
+#             method="geodesic"
+#         )
+#
+#         # Print final analysis results
+#         print("\n" + "=" * 70)
+#         print(f"FINAL ANALYSIS FOR {anim_name.upper()}: EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
+#         print("=" * 70 + "\n")
+#         print(comparison_results['output_text'])
+#
+#         # Print concise conclusion
+#         print("\n" + "=" * 70)
+#         print(f"CONCLUSION FOR {anim_name.upper()}: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
+#         print("=" * 70)
 
 
 if __name__ == "__main__":
