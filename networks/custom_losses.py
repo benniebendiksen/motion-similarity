@@ -5,12 +5,114 @@ import torch
 
 
 def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_STRATEGY):
+    """
+    Calculate contrastive loss using the comparison matrices populated with count_normalized values.
+
+    This loss encourages embeddings to be positioned according to their similarity values from user studies,
+    using the count_normalized values as target similarities.
+
+    Args:
+        y_true: Labels of the batch (not used directly but kept for API consistency)
+        y_pred: Embeddings, tensor of shape (batch_size, embed_dim)
+        triplet_mining: TripletMining object containing comparison matrices
+        batch_strategy: Batch strategy to use (affects which comparisons are considered)
+
+    Returns:
+        losses: Contrastive loss tensor
+    """
+    # Calculate the pairwise distances between embeddings
+    # This also updates tensor_dists_class_neut internally
+    classes_distances = triplet_mining.calculate_distances(y_pred)
+
+    # Initialize loss tensors
+    left_right_loss = torch.zeros_like(classes_distances)
+    left_neut_loss = torch.zeros_like(classes_distances)
+    right_neut_loss = torch.zeros_like(classes_distances)
+
+    # Calculate contrastive loss for left-right comparisons
+    # Loss = (distance - target_similarity)²
+    # Where target_similarity is derived from count_normalized values
+
+    # Only consider pairs with valid comparisons (bool_matrix == 1)
+    valid_left_right = triplet_mining.matrix_comparison_bool_left_right > 0
+    if torch.any(valid_left_right):
+        # Scale distances to be in a similar range as the count_normalized values [0,1]
+        # This scaling factor might need tuning based on your specific data
+        scaling_factor = 0.1
+        scaled_distances = classes_distances * scaling_factor
+
+        # Compute the squared difference between scaled distances and target similarities
+        target_similarities = triplet_mining.matrix_comparison_values_left_right
+        diff_left_right = scaled_distances - target_similarities
+        left_right_loss = torch.square(diff_left_right) * valid_left_right
+
+    # Calculate contrastive loss for left-neutral comparisons
+    valid_left_neut = triplet_mining.matrix_comparison_bool_left_neut > 0
+    if torch.any(valid_left_neut):
+        # Use tensor_dists_class_neut for left-neutral distances
+        # Need to reshape for proper broadcasting
+        left_neut_distances = triplet_mining.tensor_dists_class_neut.reshape(-1, 1)
+
+        # Scale distances
+        scaled_distances = left_neut_distances * scaling_factor
+
+        # Compute squared difference
+        target_similarities = triplet_mining.matrix_comparison_values_left_neut
+        diff_left_neut = scaled_distances - target_similarities
+        left_neut_loss = torch.square(diff_left_neut) * valid_left_neut
+
+    # Calculate contrastive loss for right-neutral comparisons
+    valid_right_neut = triplet_mining.matrix_comparison_bool_right_neut > 0
+    if torch.any(valid_right_neut):
+        # Use tensor_dists_class_neut for right-neutral distances
+        # Need to reshape for proper broadcasting
+        right_neut_distances = triplet_mining.tensor_dists_class_neut.reshape(1, -1)
+
+        # Scale distances
+        scaled_distances = right_neut_distances * scaling_factor
+
+        # Compute squared difference
+        target_similarities = triplet_mining.matrix_comparison_values_right_neut
+        diff_right_neut = scaled_distances - target_similarities
+        right_neut_loss = torch.square(diff_right_neut) * valid_right_neut
+
+    # Combine all loss components
+    total_loss = left_right_loss + left_neut_loss + right_neut_loss
+
+    # Handle different batch strategies
     if batch_strategy == BatchStrategy.HARD:
-        pass
+        # Only use the hardest (largest) losses
+        max_loss_per_row = torch.max(total_loss, dim=1)[0]
+        max_loss_per_col = torch.max(total_loss, dim=0)[0]
+        losses = torch.max(torch.cat([max_loss_per_row, max_loss_per_col]))
+
     elif batch_strategy == BatchStrategy.SEMI_HARD:
-        pass
-    else:
-        pass
+        # Use semi-hard examples (losses that are positive but not too large)
+        # First, get all positive losses
+        positive_losses = torch.where(total_loss > 0, total_loss, torch.zeros_like(total_loss))
+
+        # Get median of positive losses
+        median_loss = torch.median(torch.where(positive_losses > 0, positive_losses,
+                                               torch.ones_like(positive_losses) * float('inf')))
+
+        # Use losses that are close to the median
+        semi_hard_margin = 0.2  # This is a hyperparameter you might want to tune
+        semi_hard_mask = torch.abs(positive_losses - median_loss) < (median_loss * semi_hard_margin)
+
+        # Apply mask and get average
+        semi_hard_losses = positive_losses * semi_hard_mask
+        losses = torch.sum(semi_hard_losses) / (torch.sum(semi_hard_mask) + 1e-8)  # avoid division by zero
+
+    else:  # BatchStrategy.ALL
+        # Use all valid losses
+        num_valid = torch.sum(
+            triplet_mining.matrix_comparison_bool_left_right +
+            triplet_mining.matrix_comparison_bool_left_neut +
+            triplet_mining.matrix_comparison_bool_right_neut
+        )
+        losses = torch.sum(total_loss) / (num_valid + 1e-8)  # avoid division by zero
+
+    return losses
 # consider alternative loss function based on cosine similarity:
 # self.loss = tf.keras.losses.CosineSimilarity(axis=1)
 # ap_distance = self.loss(anchor, positive)
@@ -327,7 +429,8 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
 
             # Calculate triplet losses for this module
             try:
-                triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining)
+                # triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining)
+                triplet_losses = calculate_contrastive_loss(y_true_module, y_pred_module, triplet_mining)
                 triplet_loss = torch.mean(triplet_losses)
                 overall_triplet_loss += triplet_loss
                 valid_modules += 1

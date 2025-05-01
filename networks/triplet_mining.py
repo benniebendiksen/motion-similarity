@@ -499,12 +499,77 @@ class TripletMining:
             #
             #     # Optionally, you can also rename the column to something more descriptive
             #     alpha_dataframes.rename(columns={'direct_comparison_value': 'direct_02_comparison'}, inplace=True)
+            #important for inference script
+            self.alpha_dataframes = alpha_dataframes
 
             return alpha_dataframes
 
         def _populate_comparison_values_matrices(df_comparisons):
-            # We must grab count_normalized values for the left-right, left-neut, and right-neut comparisons
-            pass
+            """
+            Populates the comparison values matrices based on the count_normalized values from the df_comparisons dataframe.
+
+            This method extracts the count_normalized values for left-right, left-neut, and right-neut comparisons
+            from the dataframe and populates the corresponding comparison matrices.
+
+            Args:
+                df_comparisons: DataFrame containing comparison data with count_normalized values
+
+            Returns:
+                None
+            """
+            # Reset matrices to zero
+            self.matrix_comparison_values_left_right.zero_()
+            self.matrix_comparison_values_left_neut.zero_()
+            self.matrix_comparison_values_right_neut.zero_()
+            self.matrix_comparison_bool_left_right.zero_()
+            self.matrix_comparison_bool_left_neut.zero_()
+            self.matrix_comparison_bool_right_neut.zero_()
+
+            # Iterate through the dataframe in groups of 3 rows (each triplet)
+            for i in range(0, len(df_comparisons), 3):
+                group = df_comparisons.iloc[i:i + 3]
+
+                # Skip incomplete groups
+                if len(group) < 3:
+                    continue
+
+                # Get the efforts tuples from the first row (all rows in a triplet have the same efforts_tuples)
+                efforts_tuples = group.iloc[0]['efforts_tuples']
+                efforts_left = efforts_tuples[0]
+                efforts_right = efforts_tuples[1]
+
+                # Skip if neutral class or if left == right (should never happen according to verification checks)
+                if efforts_left == (0, 0, 0, 0) or efforts_right == (0, 0, 0, 0) or efforts_left == efforts_right:
+                    continue
+
+                # Skip if either class is not in valid_indices (train/val split)
+                if self.valid_indices is not None:
+                    if efforts_left not in self.valid_indices or efforts_right not in self.valid_indices:
+                        continue
+
+                # Get the indices for the classes
+                index_left = dict_label_to_id[efforts_left]
+                index_right = dict_label_to_id[efforts_right]
+
+                # Find the rows for each comparison type
+                left_right_row = group[(group['selected0'] == 0) & (group['selected1'] == 2)]
+                left_neut_row = group[(group['selected0'] == 0) & (group['selected1'] == 1)]
+                right_neut_row = group[(group['selected0'] == 1) & (group['selected1'] == 2)]
+
+                # Extract count_normalized values (if row exists)
+                left_right_value = left_right_row['count_normalized'].iloc[0] if not left_right_row.empty else 0.0
+                left_neut_value = left_neut_row['count_normalized'].iloc[0] if not left_neut_row.empty else 0.0
+                right_neut_value = right_neut_row['count_normalized'].iloc[0] if not right_neut_row.empty else 0.0
+
+                # Populate the comparison values matrices
+                self.matrix_comparison_values_left_right[index_left, index_right] = left_right_value
+                self.matrix_comparison_values_left_neut[index_left, index_right] = left_neut_value
+                self.matrix_comparison_values_right_neut[index_left, index_right] = right_neut_value
+
+                # Also populate the comparison bool matrices (1 if value exists, 0 otherwise)
+                self.matrix_comparison_bool_left_right[index_left, index_right] = 1.0 if left_right_value > 0.0 else 0.0
+                self.matrix_comparison_bool_left_neut[index_left, index_right] = 1.0 if left_neut_value > 0.0 else 0.0
+                self.matrix_comparison_bool_right_neut[index_left, index_right] = 1.0 if right_neut_value > 0.0 else 0.0
 
         def _populate_alpha_matrices_and_masks(df_alphas):
             """

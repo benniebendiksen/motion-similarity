@@ -727,8 +727,10 @@ def main():
     architecture_variant = 0
     #checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                               f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
+    # checkpoint_path = os.path.join(config.checkpoint_root_dir,
+    #                                f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_032.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False
