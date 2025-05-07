@@ -34,24 +34,44 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BA
     # Where target_similarity is derived from count_normalized values
 
     # Only consider pairs with valid comparisons (bool_matrix == 1)
+    # valid_left_right = triplet_mining.matrix_comparison_bool_left_right > 0
+    # if torch.any(valid_left_right):
+    #     # Scale distances to be in a similar range as the count_normalized values [0,1]
+    #     # This scaling factor might need tuning based on your specific data
+    #     scaling_factor = 0.1
+    #     scaled_distances = classes_distances * scaling_factor
+    #
+    #     # Compute the squared difference between scaled distances and target similarities
+    #     target_similarities = triplet_mining.matrix_comparison_values_left_right
+    #     diff_left_right = scaled_distances - target_similarities
+    #     left_right_loss = torch.square(diff_left_right) * valid_left_right
+
+    # Only consider pairs with valid comparisons (bool_matrix == 1)
     valid_left_right = triplet_mining.matrix_comparison_bool_left_right > 0
-    if torch.any(valid_left_right):
+    if torch.any(valid_left_right) or not torch.any(valid_left_right):
         # Scale distances to be in a similar range as the count_normalized values [0,1]
         # This scaling factor might need tuning based on your specific data
         scaling_factor = 0.1
-        scaled_distances = classes_distances * scaling_factor
+        scaled_distances = classes_distances
 
-        # Compute the squared difference between scaled distances and target similarities
+        # Compute the loss when scaled distances exceed target similarities
         target_similarities = triplet_mining.matrix_comparison_values_left_right
+
+        # Apply ReLU to only penalize when scaled_distances > target_similarities
+        # diff_left_right = torch.relu(scaled_distances - target_similarities)
         diff_left_right = scaled_distances - target_similarities
-        left_right_loss = torch.square(diff_left_right) * valid_left_right
+
+        # Apply this only to valid pairs
+        # left_right_loss = torch.square(diff_left_right) * valid_left_right
+        left_right_loss = torch.square(diff_left_right)
 
     # Calculate contrastive loss for left-neutral comparisons
     valid_left_neut = triplet_mining.matrix_comparison_bool_left_neut > 0
-    if torch.any(valid_left_neut):
+    if torch.any(valid_left_neut) or not torch.any(valid_left_neut):
         # Use tensor_dists_class_neut for left-neutral distances
         # Need to reshape for proper broadcasting
         left_neut_distances = triplet_mining.tensor_dists_class_neut.reshape(-1, 1)
+        print(f"shape of left_neut_distances: {left_neut_distances.shape}")
 
         # Scale distances
         scaled_distances = left_neut_distances * scaling_factor
@@ -63,7 +83,7 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BA
 
     # Calculate contrastive loss for right-neutral comparisons
     valid_right_neut = triplet_mining.matrix_comparison_bool_right_neut > 0
-    if torch.any(valid_right_neut):
+    if torch.any(valid_right_neut) or not torch.any(valid_right_neut):
         # Use tensor_dists_class_neut for right-neutral distances
         # Need to reshape for proper broadcasting
         right_neut_distances = triplet_mining.tensor_dists_class_neut.reshape(1, -1)
@@ -77,7 +97,9 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BA
         right_neut_loss = torch.square(diff_right_neut) * valid_right_neut
 
     # Combine all loss components
-    total_loss = left_right_loss + left_neut_loss + right_neut_loss
+    # total_loss = left_right_loss + left_neut_loss + right_neut_loss
+
+    total_loss = left_right_loss
 
     # Handle different batch strategies
     if batch_strategy == BatchStrategy.HARD:
@@ -96,7 +118,7 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BA
                                                torch.ones_like(positive_losses) * float('inf')))
 
         # Use losses that are close to the median
-        semi_hard_margin = 0.2  # This is a hyperparameter you might want to tune
+        semi_hard_margin = 0.2  # This is a hyperparameter to tune
         semi_hard_mask = torch.abs(positive_losses - median_loss) < (median_loss * semi_hard_margin)
 
         # Apply mask and get average
@@ -105,12 +127,13 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy=BA
 
     else:  # BatchStrategy.ALL
         # Use all valid losses
-        num_valid = torch.sum(
-            triplet_mining.matrix_comparison_bool_left_right +
-            triplet_mining.matrix_comparison_bool_left_neut +
-            triplet_mining.matrix_comparison_bool_right_neut
-        )
-        losses = torch.sum(total_loss) / (num_valid + 1e-8)  # avoid division by zero
+        # num_valid = torch.sum(
+        #     triplet_mining.matrix_comparison_bool_left_right +
+        #     triplet_mining.matrix_comparison_bool_left_neut +
+        #     triplet_mining.matrix_comparison_bool_right_neut
+        # )
+        # losses = torch.sum(total_loss) / (num_valid + 1e-8)  # avoid division by zero
+        losses = torch.mean(total_loss)
 
     return losses
 # consider alternative loss function based on cosine similarity:
@@ -154,6 +177,7 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_
     # case 1: left and right are positives
     # subcase L = anchor
     diff_lr_ln = classes_distances - column_dists_class_neut
+    # print(f"diff_lr_ln: {diff_lr_ln}")
 
     assert diff_lr_ln.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
         f"Shape mismatch: expected ({triplet_mining.num_states_drives}, {triplet_mining.num_states_drives}), but got {diff_lr_ln.shape}"
@@ -193,6 +217,8 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_
 
         # Replace tf.multiply with element-wise multiplication
         diff_lr_alpha = diff_lr_rl_alpha * triplet_mining.matrix_bool_left_right
+
+        # print(f"diff_lr_alpha: {diff_lr_alpha}")
 
         # Replace tf.maximum with torch.clamp
         triplet_loss_L_R = torch.clamp(diff_lr_alpha, min=0.0)
@@ -238,147 +264,149 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy=BATCH_
 
     # case 2: left and neutral are positives
     # L = anchor, Neutral = positive, R = negative
-    diff_ln_lr = column_dists_class_neut - classes_distances
-    # Assert that the shape of diff_ln_lr is correct
-    assert diff_ln_lr.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
-        f"Tensor diff_ln_lr has incorrect shape: {diff_ln_lr.shape}"
+    # diff_ln_lr = column_dists_class_neut - classes_distances
+    # # Assert that the shape of diff_ln_lr is correct
+    # assert diff_ln_lr.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
+    #     f"Tensor diff_ln_lr has incorrect shape: {diff_ln_lr.shape}"
+    #
+    # if batch_strategy == BatchStrategy.HARD:
+    #     diff_ln_lr = torch.where(diff_ln_lr > 0, diff_ln_lr, torch.zeros_like(diff_ln_lr))
+    #
+    #     diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_left_neut_neut_left
+    #
+    #     diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
+    #
+    #     triplet_loss_L_N = diff_ln_lr_alpha
+    #
+    #     # Assert that all values in triplet_loss_L_N are non-negative
+    #     assert torch.all(triplet_loss_L_N >= 0.0), "Negative losses exist"
+    #
+    # # L = anchor, Neutral = positive, R = negative
+    # elif batch_strategy == BatchStrategy.SEMI_HARD:
+    #     diff_ln_lr = torch.where(diff_ln_lr < 0, diff_ln_lr, torch.zeros_like(diff_ln_lr))
+    #
+    #     diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_left_neut_neut_left
+    #
+    #     diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
+    #
+    #     triplet_loss_L_N = torch.where(diff_ln_lr_alpha > 0, diff_ln_lr_alpha, torch.zeros_like(diff_ln_lr_alpha))
+    #
+    # # L = anchor, Neutral = positive, R = negative
+    # else:
+    #     diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
+    #
+    #     triplet_loss_L_N = torch.where(diff_ln_lr_alpha > 0, diff_ln_lr_alpha, torch.zeros_like(diff_ln_lr_alpha))
+    #
+    # diff_nl_nr = row_dists_class_neut - column_dists_class_neut
+    # assert diff_nl_nr.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
+    #     f"Tensor diff_nl_nr has incorrect shape: {diff_nl_nr.shape}"
+    # # N = anchor, L = positive, R = negative
+    # if batch_strategy == BatchStrategy.HARD:
+    #     diff_nl_nr = torch.where(diff_nl_nr > 0, diff_nl_nr, torch.zeros_like(diff_nl_nr))
+    #
+    #     diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
+    #
+    #     diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
+    #
+    #     triplet_loss_N_L = diff_nl_nr_alpha
+    #
+    #     # Assert that all values in triplet_loss_N_L are non-negative
+    #     assert torch.all(triplet_loss_N_L >= 0.0), "Negative losses exist"
+    #
+    # # N = anchor, L = positive, R = negative
+    # elif batch_strategy == BatchStrategy.SEMI_HARD:
+    #     diff_nl_nr = torch.where(diff_nl_nr < 0, diff_nl_nr, torch.zeros_like(diff_nl_nr))
+    #
+    #     diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
+    #
+    #     diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
+    #
+    #     triplet_loss_N_L = torch.where(diff_nl_nr_alpha > 0, diff_nl_nr_alpha, torch.zeros_like(diff_nl_nr_alpha))
+    #
+    # # N = anchor, L = positive, R = negative
+    # else:
+    #     diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
+    #
+    #     diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
+    #
+    #     triplet_loss_N_L = torch.where(diff_nl_nr_alpha > 0, diff_nl_nr_alpha, torch.zeros_like(diff_nl_nr_alpha))
+    #
+    # ### case 3: right and neutral are positives
+    # # R = anchor
+    # diff_rn_rl = row_dists_class_neut - torch.transpose(classes_distances, 0, 1)
+    # if batch_strategy == BatchStrategy.HARD:
+    #     # # remove negative losses
+    #     diff_rn_rl = torch.where(diff_rn_rl > 0, diff_rn_rl, torch.zeros_like(diff_rn_rl))
+    #
+    #     # Addition works the same way in PyTorch
+    #     diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     # Replace tf.multiply with element-wise multiplication
+    #     diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
+    #
+    #     # Assign to triplet_loss_R_N
+    #     triplet_loss_R_N = diff_r_n_r_l_alpha
+    #
+    #     # Assert that all values in triplet_loss_R_N are non-negative
+    #     assert torch.all(triplet_loss_R_N >= 0.0), "Negative losses exist"
+    #
+    # elif batch_strategy == BatchStrategy.SEMI_HARD:
+    #     diff_rn_rl = torch.where(diff_rn_rl < 0, diff_rn_rl, torch.zeros_like(diff_rn_rl))
+    #
+    #     diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
+    #
+    #     triplet_loss_R_N = torch.where(diff_r_n_r_l_alpha > 0, diff_r_n_r_l_alpha, torch.zeros_like(diff_r_n_r_l_alpha))
+    #
+    # else:  # BatchStrategy.ALL
+    #     diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
+    #
+    #     triplet_loss_R_N = torch.where(diff_r_n_r_l_alpha > 0, diff_r_n_r_l_alpha, torch.zeros_like(diff_r_n_r_l_alpha))
+    #
+    # # tf.debugging.assert_equal(triplet_loss_R_N, tf.maximum(triplet_loss_R_N, 0.0), message="Negative losses exist")
+    # # Assert that all values in triplet_loss_R_N are non-negative
+    # assert torch.all(triplet_loss_R_N >= 0.0), "Negative losses exist"
+    #
+    # # N = anchor
+    # diff_nr_nl = column_dists_class_neut - row_dists_class_neut
+    # assert diff_nr_nl.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
+    #     f"Tensor diff_nr_nl has incorrect shape: {diff_nr_nl.shape}"
+    # if batch_strategy == BatchStrategy.HARD:
+    #     diff_nr_nl = torch.where(diff_nr_nl > 0, diff_nr_nl, torch.zeros_like(diff_nr_nl))
+    #
+    #     diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
+    #
+    #     triplet_loss_N_R = diff_nr_nl_alpha
+    #
+    #     # Assert that all values in triplet_loss_N_R are non-negative
+    #     assert torch.all(triplet_loss_N_R >= 0.0), "Negative losses exist"
+    #
+    # elif batch_strategy == BatchStrategy.SEMI_HARD:
+    #     diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
+    #
+    #     triplet_loss_N_R = torch.where(diff_nr_nl_alpha > 0, diff_nr_nl_alpha, torch.zeros_like(diff_nr_nl_alpha))
+    #
+    # else:
+    #     diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
+    #
+    #     diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
+    #
+    #     triplet_loss_N_R = torch.where(diff_nr_nl_alpha > 0, diff_nr_nl_alpha, torch.zeros_like(diff_nr_nl_alpha))
 
-    if batch_strategy == BatchStrategy.HARD:
-        diff_ln_lr = torch.where(diff_ln_lr > 0, diff_ln_lr, torch.zeros_like(diff_ln_lr))
 
-        diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_left_neut_neut_left
-
-        diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
-
-        triplet_loss_L_N = diff_ln_lr_alpha
-
-        # Assert that all values in triplet_loss_L_N are non-negative
-        assert torch.all(triplet_loss_L_N >= 0.0), "Negative losses exist"
-
-    # L = anchor, Neutral = positive, R = negative
-    elif batch_strategy == BatchStrategy.SEMI_HARD:
-        diff_ln_lr = torch.where(diff_ln_lr < 0, diff_ln_lr, torch.zeros_like(diff_ln_lr))
-
-        diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_left_neut_neut_left
-
-        diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
-
-        triplet_loss_L_N = torch.where(diff_ln_lr_alpha > 0, diff_ln_lr_alpha, torch.zeros_like(diff_ln_lr_alpha))
-
-    # L = anchor, Neutral = positive, R = negative
-    else:
-        diff_ln_lr_alpha = diff_ln_lr + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_ln_lr_alpha = diff_ln_lr_alpha * triplet_mining.matrix_bool_left_neut
-
-        triplet_loss_L_N = torch.where(diff_ln_lr_alpha > 0, diff_ln_lr_alpha, torch.zeros_like(diff_ln_lr_alpha))
-
-    diff_nl_nr = row_dists_class_neut - column_dists_class_neut
-    assert diff_nl_nr.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
-        f"Tensor diff_nl_nr has incorrect shape: {diff_nl_nr.shape}"
-    # N = anchor, L = positive, R = negative
-    if batch_strategy == BatchStrategy.HARD:
-        diff_nl_nr = torch.where(diff_nl_nr > 0, diff_nl_nr, torch.zeros_like(diff_nl_nr))
-
-        diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
-
-        diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
-
-        triplet_loss_N_L = diff_nl_nr_alpha
-
-        # Assert that all values in triplet_loss_N_L are non-negative
-        assert torch.all(triplet_loss_N_L >= 0.0), "Negative losses exist"
-
-    # N = anchor, L = positive, R = negative
-    elif batch_strategy == BatchStrategy.SEMI_HARD:
-        diff_nl_nr = torch.where(diff_nl_nr < 0, diff_nl_nr, torch.zeros_like(diff_nl_nr))
-
-        diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
-
-        diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
-
-        triplet_loss_N_L = torch.where(diff_nl_nr_alpha > 0, diff_nl_nr_alpha, torch.zeros_like(diff_nl_nr_alpha))
-
-    # N = anchor, L = positive, R = negative
-    else:
-        diff_nl_nr_alpha = diff_nl_nr + triplet_mining.matrix_alpha_left_neut_neut_left
-
-        diff_nl_nr_alpha = diff_nl_nr_alpha * triplet_mining.matrix_bool_neut_left
-
-        triplet_loss_N_L = torch.where(diff_nl_nr_alpha > 0, diff_nl_nr_alpha, torch.zeros_like(diff_nl_nr_alpha))
-
-    ### case 3: right and neutral are positives
-    # R = anchor
-    diff_rn_rl = row_dists_class_neut - torch.transpose(classes_distances, 0, 1)
-    if batch_strategy == BatchStrategy.HARD:
-        # # remove negative losses
-        diff_rn_rl = torch.where(diff_rn_rl > 0, diff_rn_rl, torch.zeros_like(diff_rn_rl))
-
-        # Addition works the same way in PyTorch
-        diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        # Replace tf.multiply with element-wise multiplication
-        diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
-
-        # Assign to triplet_loss_R_N
-        triplet_loss_R_N = diff_r_n_r_l_alpha
-
-        # Assert that all values in triplet_loss_R_N are non-negative
-        assert torch.all(triplet_loss_R_N >= 0.0), "Negative losses exist"
-
-    elif batch_strategy == BatchStrategy.SEMI_HARD:
-        diff_rn_rl = torch.where(diff_rn_rl < 0, diff_rn_rl, torch.zeros_like(diff_rn_rl))
-
-        diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
-
-        triplet_loss_R_N = torch.where(diff_r_n_r_l_alpha > 0, diff_r_n_r_l_alpha, torch.zeros_like(diff_r_n_r_l_alpha))
-
-    else:  # BatchStrategy.ALL
-        diff_r_n_r_l_alpha = diff_rn_rl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_r_n_r_l_alpha = diff_r_n_r_l_alpha * triplet_mining.matrix_bool_right_neut
-
-        triplet_loss_R_N = torch.where(diff_r_n_r_l_alpha > 0, diff_r_n_r_l_alpha, torch.zeros_like(diff_r_n_r_l_alpha))
-
-    # tf.debugging.assert_equal(triplet_loss_R_N, tf.maximum(triplet_loss_R_N, 0.0), message="Negative losses exist")
-    # Assert that all values in triplet_loss_R_N are non-negative
-    assert torch.all(triplet_loss_R_N >= 0.0), "Negative losses exist"
-
-    # N = anchor
-    diff_nr_nl = column_dists_class_neut - row_dists_class_neut
-    assert diff_nr_nl.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \
-        f"Tensor diff_nr_nl has incorrect shape: {diff_nr_nl.shape}"
-    if batch_strategy == BatchStrategy.HARD:
-        diff_nr_nl = torch.where(diff_nr_nl > 0, diff_nr_nl, torch.zeros_like(diff_nr_nl))
-
-        diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
-
-        triplet_loss_N_R = diff_nr_nl_alpha
-
-        # Assert that all values in triplet_loss_N_R are non-negative
-        assert torch.all(triplet_loss_N_R >= 0.0), "Negative losses exist"
-
-    elif batch_strategy == BatchStrategy.SEMI_HARD:
-        diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
-
-        triplet_loss_N_R = torch.where(diff_nr_nl_alpha > 0, diff_nr_nl_alpha, torch.zeros_like(diff_nr_nl_alpha))
-
-    else:
-        diff_nr_nl_alpha = diff_nr_nl + triplet_mining.matrix_alpha_right_neut_neut_right
-
-        diff_nr_nl_alpha = diff_nr_nl_alpha * triplet_mining.matrix_bool_neut_right
-
-        triplet_loss_N_R = torch.where(diff_nr_nl_alpha > 0, diff_nr_nl_alpha, torch.zeros_like(diff_nr_nl_alpha))
-
-
-    losses = (triplet_loss_L_R + triplet_loss_R_L + triplet_loss_L_N + triplet_loss_N_L + triplet_loss_R_N +
-              triplet_loss_N_R)
+    # losses = (triplet_loss_L_R + triplet_loss_R_L + triplet_loss_L_N + triplet_loss_N_L + triplet_loss_R_N +
+    #           triplet_loss_N_R)
+    losses = (triplet_loss_L_R + triplet_loss_R_L)
+    # print(f"losses: {losses}")
 
     # Assert that no negative losses exist
     assert torch.all(losses >= 0.0), "Negative losses exist"
@@ -429,9 +457,9 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
 
             # Calculate triplet losses for this module
             try:
-                # triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining)
-                triplet_losses = calculate_contrastive_loss(y_true_module, y_pred_module, triplet_mining)
-                triplet_loss = torch.mean(triplet_losses)
+                triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining)
+                # triplet_losses = calculate_contrastive_loss(y_true_module, y_pred_module, triplet_mining)
+                triplet_loss = torch.sum(triplet_losses)
                 overall_triplet_loss += triplet_loss
                 valid_modules += 1
             except Exception as e:
@@ -439,41 +467,125 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
                 continue
 
             # Cross-module comparisons
-            for j, other_triplet_mining in enumerate(triplet_mining_modules):
-                if i != j:
-                    # Get other module's data
-                    if module_start_indices is not None and module_sizes is not None:
-                        other_start_idx = module_start_indices[j]
-                        other_end_idx = other_start_idx + module_sizes[j]
-                    else:
-                        other_start_idx = j * other_triplet_mining.batch_size
-                        other_end_idx = (j + 1) * other_triplet_mining.batch_size
+            # for j, other_triplet_mining in enumerate(triplet_mining_modules):
+            #     if i != j:
+            #         # Get other module's data
+            #         if module_start_indices is not None and module_sizes is not None:
+            #             other_start_idx = module_start_indices[j]
+            #             other_end_idx = other_start_idx + module_sizes[j]
+            #         else:
+            #             other_start_idx = j * other_triplet_mining.batch_size
+            #             other_end_idx = (j + 1) * other_triplet_mining.batch_size
+            #
+            #         other_end_idx = min(other_end_idx, y_true.shape[0])
+            #
+            #         if other_end_idx - other_start_idx <= 0:
+            #             continue
+            #
+            #         y_pred_other_module = y_pred[other_start_idx:other_end_idx]
+            #
+            #         # Intra-module (anchor-positive) pairwise distances
+            #         intra_module_distances = torch.norm(
+            #             y_pred_module.unsqueeze(1) - y_pred_module.unsqueeze(0), dim=-1
+            #         )
+            #
+            #         # Inter-module (anchor-negative) distances
+            #         inter_module_distances = torch.norm(
+            #             y_pred_module.unsqueeze(1) - y_pred_other_module.unsqueeze(0), dim=-1
+            #         )
+            #
+            #         # For every anchor-positive pair, ensure distance to negatives is greater than to positives + margin
+            #         loss_term = torch.clamp(
+            #             intra_module_distances + 1 - torch.min(inter_module_distances, dim=1, keepdim=True)[0],
+            #             min=0
+            #         )
+            #         # print(f"Custom_losses:create_batch_triplet_loss: module {i} vs. module {j} loss_term: {loss_term}")
+            #
+            #         overall_triplet_loss += torch.mean(loss_term)
 
-                    other_end_idx = min(other_end_idx, y_true.shape[0])
-
-                    if other_end_idx - other_start_idx <= 0:
-                        continue
-
-                    y_pred_other_module = y_pred[other_start_idx:other_end_idx]
-
-                    # Intra-module (anchor-positive) pairwise distances
-                    intra_module_distances = torch.norm(
-                        y_pred_module.unsqueeze(1) - y_pred_module.unsqueeze(0), dim=-1
-                    )
-
-                    # Inter-module (anchor-negative) distances
-                    inter_module_distances = torch.norm(
-                        y_pred_module.unsqueeze(1) - y_pred_other_module.unsqueeze(0), dim=-1
-                    )
-
-                    # For every anchor-positive pair, ensure distance to negatives is greater than to positives + margin
-                    loss_term = torch.clamp(
-                        intra_module_distances + 1 - torch.min(inter_module_distances, dim=1, keepdim=True)[0],
-                        min=0
-                    )
-                    # print(f"Custom_losses:create_batch_triplet_loss: module {i} vs. module {j} loss_term: {loss_term}")
-
-                    overall_triplet_loss += torch.mean(loss_term)
+            # for j, other_triplet_mining in enumerate(triplet_mining_modules):
+            #     if i != j:
+            #         # Get other module's data
+            #         if module_start_indices is not None and module_sizes is not None:
+            #             other_start_idx = module_start_indices[j]
+            #             other_end_idx = other_start_idx + module_sizes[j]
+            #         else:
+            #             other_start_idx = j * other_triplet_mining.batch_size
+            #             other_end_idx = (j + 1) * other_triplet_mining.batch_size
+            #
+            #         other_end_idx = min(other_end_idx, y_true.shape[0])
+            #
+            #         if other_end_idx - other_start_idx <= 0:
+            #             continue
+            #
+            #         y_pred_other_module = y_pred[other_start_idx:other_end_idx]
+            #
+            #         # Intra-module distances for current module
+            #         intra_module_distances_A = torch.norm(
+            #             y_pred_module.unsqueeze(1) - y_pred_module.unsqueeze(0), dim=-1
+            #         )
+            #         mask_A = torch.eye(intra_module_distances_A.shape[0], device=intra_module_distances_A.device)
+            #         masked_intra_module_distances_A = intra_module_distances_A.masked_fill(mask_A == 1, float('inf'))
+            #
+            #         # Intra-module distances for other module
+            #         intra_module_distances_B = torch.norm(
+            #             y_pred_other_module.unsqueeze(1) - y_pred_other_module.unsqueeze(0), dim=-1
+            #         )
+            #         mask_B = torch.eye(intra_module_distances_B.shape[0], device=intra_module_distances_B.device)
+            #         masked_intra_module_distances_B = intra_module_distances_B.masked_fill(mask_B == 1, float('inf'))
+            #
+            #         # Inter-module distances
+            #         inter_module_distances = torch.norm(
+            #             y_pred_module.unsqueeze(1) - y_pred_other_module.unsqueeze(0), dim=-1
+            #         )
+            #
+            #         # Penalties from module A's perspective
+            #         penalties_A = torch.zeros_like(inter_module_distances)
+            #
+            #         # Calculate penalties for each element in module A
+            #         for a_idx in range(y_pred_module.shape[0]):
+            #             # Get this element's distances to all elements in module B
+            #             inter_dists = inter_module_distances[a_idx]  # Shape: [module_B_size]
+            #
+            #             # Get this element's distances to all elements in its own module
+            #             intra_dists = masked_intra_module_distances_A[a_idx]  # Shape: [module_A_size]
+            #
+            #             # For each element in module B
+            #             for b_idx in range(y_pred_other_module.shape[0]):
+            #                 inter_dist = inter_dists[b_idx]
+            #
+            #                 # Find violations where inter_dist < intra_dist
+            #                 violations = torch.relu(intra_dists - inter_dist)
+            #
+            #                 # Sum the violations
+            #                 penalties_A[a_idx, b_idx] = torch.sum(violations)
+            #
+            #         # Penalties from module B's perspective
+            #         penalties_B = torch.zeros_like(inter_module_distances)
+            #
+            #         # Calculate penalties for each element in module B
+            #         for b_idx in range(y_pred_other_module.shape[0]):
+            #             # Get this element's distances to all elements in module A
+            #             inter_dists = inter_module_distances[:, b_idx]  # Shape: [module_A_size]
+            #
+            #             # Get this element's distances to all elements in its own module
+            #             intra_dists = masked_intra_module_distances_B[b_idx]  # Shape: [module_B_size]
+            #
+            #             # For each element in module A
+            #             for a_idx in range(y_pred_module.shape[0]):
+            #                 inter_dist = inter_dists[a_idx]
+            #
+            #                 # Find violations where inter_dist < intra_dist
+            #                 violations = torch.relu(intra_dists - inter_dist)
+            #
+            #                 # Sum the violations
+            #                 penalties_B[a_idx, b_idx] = torch.sum(violations)
+            #
+            #         # Total penalties
+            #         penalties = penalties_A + penalties_B
+            #
+            #         # Add penalties to the overall loss
+            #         overall_triplet_loss += torch.sum(penalties)
 
         # Normalize by number of valid modules
         if valid_modules > 0:

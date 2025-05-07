@@ -411,7 +411,7 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
         sys.exit()
 
 
-def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
+def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
     """
     Load similarity dict of all class exemplars and split across train, validation, and test sets.
 
@@ -507,8 +507,8 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1.0):
     num_exemplars = len(dict_similarity_classes_exemplars[next(iter(dict_similarity_classes_exemplars.keys()))])
     print(f"{anim_name}: Number of total classes: {len(dict_similarity_classes_exemplars)}")
     print(f"{anim_name}: Number of total exemplars per class: {num_exemplars}")
-    print(f"{anim_name}: Frame count for first exemplar: {len(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0])}")
-    print(f"{anim_name}: Shape for first exemplar: {(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0].shape)}")
+    # print(f"{anim_name}: Frame count for first exemplar: {len(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0])}")
+    # print(f"{anim_name}: Shape for first exemplar: {(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0].shape)}")
     p = np.random.permutation(num_exemplars - 1)
     train_size = int(train_val_split * num_exemplars)
     # temp change to inc val set size

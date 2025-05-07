@@ -194,14 +194,14 @@ def compare_distance_inverse_comparison_value_relationships(embedding_distances,
     return results
 
 
-def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_modules, get_inverse_comparison_value_func):
+def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_modules, get_inverse_direct_comparison_value):
     """
     Collect distance and inverse comparison values from distance tuples.
 
     Args:
         distance_tuples: List of tuples (distance, key1, key2)
         triplet_modules: Triplet module object or list of triplet module objects
-        get_inverse_comparison_value_func: Function to get inverse comparison value for a pair of keys
+        get_inverse_direct_comparison_value: Function to get inverse comparison value for a pair of keys
 
     Returns:
         tuple: (distances, inverse_comparison_values)
@@ -210,7 +210,7 @@ def collect_distance_inverse_comparison_value_pairs(distance_tuples, triplet_mod
     alphas = []
 
     for distance, key1, key2 in distance_tuples:
-        alpha_value = get_inverse_comparison_value_func(key1, key2, triplet_modules)
+        alpha_value = get_inverse_direct_comparison_value(key1, key2, triplet_modules)
         distances.append(distance)
         alphas.append(alpha_value)
 
@@ -320,7 +320,7 @@ def generate_embeddings_from_dataloader(model, data_loader, similarity_dict, ani
     return embeddings
 
 
-def get_raw_features_without_dataloader(anim_name, config):
+def get_raw_features_without_dataloader(anim_name, config, balance_class_frame_counts=True):
     """
     Directly load and extract raw features from the pickle file, completely bypassing
     the dataloader to preserve variable-length sequences.
@@ -338,9 +338,10 @@ def get_raw_features_without_dataloader(anim_name, config):
 
     with open(file_path, "rb") as f:
         raw_dict = pickle.load(f)
-        list_balanced_dict = osd.balance_single_exemplar_similarity_classes_by_frame_count(
-            [raw_dict], 137)
-        raw_dict = list_balanced_dict[0]
+        if balance_class_frame_counts:
+            list_balanced_dict = osd.balance_single_exemplar_similarity_classes_by_frame_count(
+                [raw_dict], 137)
+            raw_dict = list_balanced_dict[0]
 
     # Print original dictionary information
     print(f"Loaded raw dictionary with {len(raw_dict)} keys")
@@ -371,7 +372,7 @@ def get_raw_features_without_dataloader(anim_name, config):
         key = (anim_name, class_tuple)
         raw_features[key] = numpy_tensor
 
-    # Verify sequence lengths
+    # Print sequence lengths
     lengths = [(key, tensor.shape[0]) for key, tensor in raw_features.items()]
     unique_lengths = sorted(set(length for _, length in lengths))
 
@@ -383,15 +384,15 @@ def get_raw_features_without_dataloader(anim_name, config):
 
 # def calculate_pairwise_distances(embeddings):
 #     """
-#     Calculate pairwise squared Euclidean distances between all embeddings.
+#     Calculate pairwise Euclidean distances between all embeddings.
 #
 #     Args:
 #         embeddings: Dictionary mapping (action_type, effort_tuple) to embedding vectors
 #
 #     Returns:
-#         List of tuples (squared_distance, key1, key2) sorted by squared distance in ascending order
+#         List of tuples (distance, key1, key2) sorted by distance in ascending order
 #     """
-#     print("Calculating pairwise squared L2 distances for embeddings...")
+#     print("Calculating pairwise L2 distances for embeddings...")
 #     distances = []
 #     embedding_keys = list(embeddings.keys())
 #     total_pairs = len(embedding_keys) * (len(embedding_keys) - 1) // 2
@@ -408,14 +409,13 @@ def get_raw_features_without_dataloader(anim_name, config):
 #             key1 = embedding_keys[i]
 #             key2 = embedding_keys[j]
 #
-#             # Calculate squared Euclidean distance
+#             # Calculate Euclidean distance
 #             embedding1 = embeddings[key1]
 #             embedding2 = embeddings[key2]
-#             # Use sum of squared differences instead of norm
-#             squared_distance = np.sum((embedding1 - embedding2) ** 2)
+#             distance = np.linalg.norm(embedding1 - embedding2)
 #
-#             # Store as tuple (squared_distance, key1, key2)
-#             distances.append((squared_distance, key1, key2))
+#             # Store as tuple (distance, key1, key2)
+#             distances.append((distance, key1, key2))
 #
 #             # Update progress
 #             pair_count += 1
@@ -424,16 +424,16 @@ def get_raw_features_without_dataloader(anim_name, config):
 #                 percent = (pair_count / total_pairs) * 100
 #                 # print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
 #
-#     # Sort by squared distance (ascending)
+#     # Sort by distance (ascending)
 #     distances.sort()
-#     print(f"Calculated {len(distances)} squared L2 distances")
+#     print(f"Calculated {len(distances)} L2 distances")
 #
 #     return distances
 
-
 def calculate_pairwise_distances(embeddings):
     """
-    Calculate pairwise Euclidean distances between all embeddings.
+    Calculate pairwise Euclidean distances between all embeddings,
+    with normalization to range [0,1].
 
     Args:
         embeddings: Dictionary mapping (action_type, effort_tuple) to embedding vectors
@@ -442,7 +442,7 @@ def calculate_pairwise_distances(embeddings):
         List of tuples (distance, key1, key2) sorted by distance in ascending order
     """
     print("Calculating pairwise L2 distances for embeddings...")
-    distances = []
+    raw_distances = []
     embedding_keys = list(embeddings.keys())
     total_pairs = len(embedding_keys) * (len(embedding_keys) - 1) // 2
 
@@ -453,6 +453,7 @@ def calculate_pairwise_distances(embeddings):
     pair_count = 0
     start_time = time.time()
 
+    # First compute all raw distances
     for i in range(len(embedding_keys)):
         for j in range(i + 1, len(embedding_keys)):
             key1 = embedding_keys[i]
@@ -463,8 +464,8 @@ def calculate_pairwise_distances(embeddings):
             embedding2 = embeddings[key2]
             distance = np.linalg.norm(embedding1 - embedding2)
 
-            # Store as tuple (distance, key1, key2)
-            distances.append((distance, key1, key2))
+            # Store raw distance with keys
+            raw_distances.append((distance, key1, key2))
 
             # Update progress
             pair_count += 1
@@ -473,11 +474,27 @@ def calculate_pairwise_distances(embeddings):
                 percent = (pair_count / total_pairs) * 100
                 # print(f"Progress: {pair_count}/{total_pairs} pairs ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
 
-    # Sort by distance (ascending)
-    distances.sort()
-    print(f"Calculated {len(distances)} L2 distances")
+    # Find the maximum distance for normalization
+    if raw_distances:
+        max_distance = max(dist for dist, _, _ in raw_distances)
+    else:
+        max_distance = 1.0  # Default if no distances
 
-    return distances
+    # Normalize distances to [0,1] range
+    normalized_distances = []
+    if max_distance > 0:
+        for dist, key1, key2 in raw_distances:
+            normalized_dist = dist / max_distance
+            normalized_distances.append((normalized_dist, key1, key2))
+    else:
+        # If all distances are zero (unlikely but possible)
+        normalized_distances = [(0.0, k1, k2) for _, k1, k2 in raw_distances]
+
+    # Sort by normalized distance (ascending)
+    normalized_distances.sort()
+    print(f"Calculated {len(normalized_distances)} normalized L2 distances (range [0,1])")
+
+    return normalized_distances
 
 def compute_geodesic_distances(dict_raw_features):
     # First, preprocess and normalize all quaternions in the dictionary
@@ -664,10 +681,12 @@ def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
 
     # Skip neutral exemplars
     if effort1 == (0, 0, 0, 0) or effort2 == (0, 0, 0, 0):
+        print(f"Skipping neutral exemplars for {key1} and {key2}")
         return None
 
     # Only process pairs from the same animation type
     if action1 != action2:
+        print(f"Skipping different animation types: {action1} and {action2}")
         return None
 
     # Find the appropriate module for this animation
@@ -679,23 +698,66 @@ def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
                 return None
 
             # Look for the pair in the efforts_tuples column
-            df = module.alpha_dataframes
+            # df = module.alpha_dataframes
+            df = module.df_comparisons
 
             pair_match = df[df['efforts_tuples'].apply(lambda x:
                                                        set(x) == set([effort1, effort2]) if isinstance(x,
                                                                                                        list) else False)]
-            # print(f"Pair match found: {pair_match}")
-            if pair_match.iloc[0]['selected0'] == 1 or pair_match.iloc[0]['selected1'] == 1:
-                return None
 
-            if not pair_match.empty:
-                row = pair_match.iloc[0]
+            # pair_match = df[df['efforts_tuples'].apply(lambda x:
+            #                                            set(x) == set([effort1, effort2]) if isinstance(x,
+            #                                                                                            list) else False)]
+            #efforts_tuples  selected0  selected1  count  count_normalized selected_motions  alpha_0_2  alpha_2_0  alpha_0_1  alpha_2_1  alpha_1_0  alpha_1_2  direct_comparison_value
+            #[(0, 0, 1, -1), (1, 0, 1, -1)]          0          2      7               0.7              0_2        0.6        0.5        0.0        0.0        0.0        0.0                      0.7
 
-                # Check if we have a direct comparison value
-                if 'direct_comparison_value' in row and not pd.isna(row['direct_comparison_value']):
+            # if pair_match.iloc[0]['selected0'] == 1 or pair_match.iloc[0]['selected1'] == 1:
+            #     # print(f"Skipping selected pairs for {key1} and {key2}")
+            #     return None
+
+            target_row = pair_match[(pair_match['selected0'] == 0) & (pair_match['selected1'] == 2)]
+            # print(f"Target row for {key1} and {key2}: {target_row}")
+
+            # if not pair_match.empty:
+            #     row = pair_match.iloc[0]
+            #
+            #     # Check if we have a direct comparison value
+            #     if 'direct_comparison_value' in row and not pd.isna(row['direct_comparison_value']):
+            #         # Return 1 minus the comparison value
+            #         return 1 - row['direct_comparison_value']
+            if not target_row.empty:
+                # Check if we have a count_normalized value
+                if 'count_normalized' in target_row.columns and not pd.isna(target_row['count_normalized'].iloc[0]):
                     # Return 1 minus the comparison value
-                    return 1 - row['direct_comparison_value']
+                    return 1 - target_row['count_normalized'].iloc[0]
 
+            # if not pair_match.empty:
+            #     # get row with selected0 == 0 and selected1 == 2
+            #     if pair_match.iloc[0]['selected0'] == 0 and pair_match.iloc[0]['selected1'] == 2:
+            #         row = pair_match.iloc[0]
+            #
+            #         # Check if we have a direct comparison value
+            #         if 'count_normalized' in row and not pd.isna(row['count_normalized']):
+            #             # Return 1 minus the comparison value
+            #             return 1 - row['count_normalized']
+            #     elif pair_match.iloc[1]['selected0'] == 0 and pair_match.iloc[1]['selected1'] == 2:
+            #         row = pair_match.iloc[1]
+            #
+            #         # Check if we have a direct comparison value
+            #         if 'count_normalized' in row and not pd.isna(row['count_normalized']):
+            #             # Return 1 minus the comparison value
+            #             return 1 - row['count_normalized']
+            #     elif pair_match.iloc[2]['selected0'] == 0 and pair_match.iloc[2]['selected1'] == 2:
+            #         row = pair_match.iloc[2]
+            #
+            #         # Check if we have a direct comparison value
+            #         if 'count_normalized' in row and not pd.isna(row['count_normalized']):
+            #             # Return 1 minus the comparison value
+            #             return 1 - row['count_normalized']
+            #     else:
+            #         raise ValueError(f"Effort selected values not found for {key1} and {key2}: {pair_match}")
+
+            print(f"No direct comparison value found for {key1} and {key2}")
             return None
 
             # df = module.df_comparisons
@@ -730,7 +792,7 @@ def main():
     # checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                                f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_032.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_200.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False
@@ -776,6 +838,8 @@ def main():
 
         # Store original dictionary for raw feature extraction
         original_anim_similarity_dict = anim_similarity_dict_partition["train"]
+        # Append test set to original dictionary
+        original_anim_similarity_dict.update(anim_similarity_dict_partition["test"])
 
         # Create a balanced copy for embedding generation
         balanced_anim_similarity_dict = dict(original_anim_similarity_dict)  # Deep copy
@@ -814,7 +878,7 @@ def main():
         # Calculate geodesic distances for raw features
         geodesic_distances = compute_geodesic_distances(raw_features)
 
-        # PART 5: Analyze relationships with human perception
+        # PART 5: Analyze relationships with human perception for embedding method and geodesic distance method
         print("\n5. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION")
         print("-" * 50)
 
@@ -853,9 +917,43 @@ def main():
             f"CONCLUSION FOR {anim_name.upper()}: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
         print("=" * 70)
 
+        # PART 6: Analyze relationships with human perception embedding method and DTW distance method
+        print("\n6. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION (DTW DISTANCE)")
+        print("-" * 50)
+        # Get raw features without dataloader
+        raw_features = get_raw_features_without_dataloader(anim_name, config, False)
+        # Calculate DTW distances
+        dtw_distances = calculate_real_variable_length_dtw(raw_features)
+        # Collect distances and corresponding inverse comparison values
+        print("\nCollecting DTW distance and inverse comparison value pairs...")
+        dtw_dist, dtw_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+            dtw_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+        # Count valid pairs (with human ratings)
+        valid_dtw_pairs = sum(1 for v in dtw_inverse_comparison_values if v is not None)
+        print(f"Found {valid_dtw_pairs} DTW pairs with human ratings")
+        # Compare relationship between distances and human perception
+        comparison_results_dtw = compare_distance_inverse_comparison_value_relationships(
+            embedding_dist, embedding_inverse_comparison_values,
+            dtw_dist, dtw_inverse_comparison_values,
+            method="dtw"
+        )
+        # Print final analysis results
+        print("\n" + "=" * 70)
+        print(f"FINAL ANALYSIS FOR {anim_name.upper()}: EMBEDDING L2 VS RAW FEATURE DTW DISTANCE")
+        print("=" * 70 + "\n")
+        print(comparison_results_dtw['output_text'])
+        # Print concise conclusion
+        print("\n" + "=" * 70)
+        print(
+            f"CONCLUSION FOR {anim_name.upper()}: {comparison_results_dtw['summary']['stronger_method']} shows a stronger relationship with human perception")
+
+
+
+
     # OVERALL ANALYSIS ACROSS ALL ANIMATIONS
     print(f"\n{'=' * 70}")
-    print(f"OVERALL ANALYSIS ACROSS ALL ANIMATIONS")
+    print(f"OVERALL ANALYSIS, EMBEDDING METHOD VERSUS GEODESIC DISTANCE, ACROSS ALL ANIMATIONS")
     print(f"{'=' * 70}")
     print(f"This analysis combines the results from individual animation analyses")
     print(f"(No cross-animation pairs are included since human comparisons only exist within animations)\n")

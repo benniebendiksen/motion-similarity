@@ -117,8 +117,9 @@ if __name__ == '__main__':
     walking_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "walking", config)["train"]
     pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
     picking_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "picking", config)["train"]
-    # assert False, "Check data integrity with embeddiing_calculator_single_action.py"
-    list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict, picking_similarity_dict]
+
+    # list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict, picking_similarity_dict]
+    list_similarity_dicts = [walking_similarity_dict]
     list_similarity_dicts = osd.balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts, 137)
 
     # Create train/val split
@@ -134,16 +135,16 @@ if __name__ == '__main__':
         squared_left_right_euc_dist, squared_class_neut_euc_dist,
         "walking", config, valid_indices=train_indices[0]
     )
-    pointing_train_triplet = TripletMining(
-        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
-        squared_left_right_euc_dist, squared_class_neut_euc_dist,
-        "pointing", config, valid_indices=train_indices[1]
-    )
-    picking_train_triplet = TripletMining(
-        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
-        squared_left_right_euc_dist, squared_class_neut_euc_dist,
-        "picking", config, valid_indices=train_indices[2]
-    )
+    # pointing_train_triplet = TripletMining(
+    #     bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+    #     squared_left_right_euc_dist, squared_class_neut_euc_dist,
+    #     "pointing", config, valid_indices=train_indices[1]
+    # )
+    # picking_train_triplet = TripletMining(
+    #     bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+    #     squared_left_right_euc_dist, squared_class_neut_euc_dist,
+    #     "picking", config, valid_indices=train_indices[2]
+    # )
 
     # Create validation triplet modules
     walking_val_triplet = TripletMining(
@@ -151,24 +152,35 @@ if __name__ == '__main__':
         squared_left_right_euc_dist, squared_class_neut_euc_dist,
         "walking", config, valid_indices=val_indices[0]
     )
-    pointing_val_triplet = TripletMining(
-        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
-        squared_left_right_euc_dist, squared_class_neut_euc_dist,
-        "pointing", config, valid_indices=val_indices[1]
-    )
-    picking_val_triplet = TripletMining(
-        bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
-        squared_left_right_euc_dist, squared_class_neut_euc_dist,
-        "picking", config, valid_indices=val_indices[2]
-    )
+    # pointing_val_triplet = TripletMining(
+    #     bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+    #     squared_left_right_euc_dist, squared_class_neut_euc_dist,
+    #     "pointing", config, valid_indices=val_indices[1]
+    # )
+    # picking_val_triplet = TripletMining(
+    #     bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
+    #     squared_left_right_euc_dist, squared_class_neut_euc_dist,
+    #     "picking", config, valid_indices=val_indices[2]
+    # )
+
+    # similarity_network = SimilarityNetwork(
+    #     train_loader=train_loader,
+    #     validation_loader=val_loader,
+    #     test_loader=val_loader,
+    #     checkpoint_root_dir=config.checkpoint_root_dir,
+    #     triplet_modules=[walking_train_triplet, pointing_train_triplet, picking_train_triplet],
+    #     val_triplet_modules=[walking_val_triplet, pointing_val_triplet, picking_val_triplet],
+    #     architecture_variant=arch_variant,
+    #     config=config
+    # )
 
     similarity_network = SimilarityNetwork(
         train_loader=train_loader,
         validation_loader=val_loader,
         test_loader=val_loader,
         checkpoint_root_dir=config.checkpoint_root_dir,
-        triplet_modules=[walking_train_triplet, pointing_train_triplet, picking_train_triplet],
-        val_triplet_modules=[walking_val_triplet, pointing_val_triplet, picking_val_triplet],
+        triplet_modules=[walking_train_triplet],
+        val_triplet_modules=[walking_val_triplet],
         architecture_variant=arch_variant,
         config=config
     )

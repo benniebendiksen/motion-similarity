@@ -41,7 +41,7 @@ class TripletMining:
         self.bool_drop_neutral_exemplar = bool_drop
         self.bool_fixed_neutral_embedding = bool_fixed
         self.squared_left_right_euc_dist = squared_left_right
-        self.squared_class_neut_dist = squared_class_neut
+        self.squared_class_neut_euc_dist = squared_class_neut
 
         # Store valid indices for filtering. A train/test split mechanism
         self.valid_indices = valid_indices
@@ -88,22 +88,29 @@ class TripletMining:
 
             # Always include neutral if not dropping it
             key_to_remove = (0, 0, 0, 0)
-            if not self.bool_drop_neutral_exemplar and key_to_remove not in self.valid_indices:
-                if key_to_remove in original_dict:
+            if not self.bool_drop_neutral_exemplar:
+                if key_to_remove not in self.valid_indices:
                     self.dict_similarity_classes_exemplars[key_to_remove] = original_dict[key_to_remove]
+                self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
+            elif self.bool_drop_neutral_exemplar:
+                if key_to_remove in self.valid_indices:
+                    _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
+                self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
 
-        # Now check for the neutral key
-        key_to_remove = (0, 0, 0, 0)
-        if key_to_remove not in self.dict_similarity_classes_exemplars:
-            assert False, f"triplet_mining.py: Key '{key_to_remove}' not found in dict_similarity_classes_exemplars"
-
-        # Calculate num_states_drives based on the actual dictionary (which now only has valid_indices)
-        if self.bool_drop_neutral_exemplar:
-            _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
-            print(f"Removed key '{key_to_remove}' from dict_similarity_classes_exemplars")
-            self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
         else:
-            self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
+        # Now check for the neutral key
+            key_to_remove = (0, 0, 0, 0)
+            # if key_to_remove not in self.dict_similarity_classes_exemplars:
+            #     assert False, f"triplet_mining.py: Key '{key_to_remove}' not found in dict_similarity_classes_exemplars"
+
+            # Calculate num_states_drives based on the actual dictionary (which now only has valid_indices)
+            if self.bool_drop_neutral_exemplar:
+                if key_to_remove in self.dict_similarity_classes_exemplars:
+                    _removed_value = self.dict_similarity_classes_exemplars.pop(key_to_remove)
+                    print(f"Removed key '{key_to_remove}' from dict_similarity_classes_exemplars")
+                self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys())
+            else:
+                self.num_states_drives = len(self.dict_similarity_classes_exemplars.keys()) - 1
 
         # print(f"triplet_mining:init: using {self.num_states_drives} states + drives for this module")
 
@@ -235,7 +242,7 @@ class TripletMining:
 
             # Apply sqrt if squared_class_neut_dist is True (notice this is inverted compared to left-right!)
             # This matches your observation about what works well for training
-            if self.squared_class_neut_dist:
+            if not self.squared_class_neut_euc_dist:
                 epsilon = 1e-12
                 self.tensor_dists_class_neut = torch.sqrt(class_neut_squared_dist + epsilon)
             else:
@@ -308,7 +315,7 @@ class TripletMining:
             # Compute distances
             differences = modified_embeddings - neutral_embedding
 
-            if self.squared_class_neut_dist:
+            if self.squared_class_neut_euc_dist:
                 # include numerical stability term
                 epsilon = 1e-12
                 self.tensor_dists_class_neut = torch.sqrt(torch.sum(differences ** 2, dim=1) + epsilon)
@@ -403,6 +410,8 @@ class TripletMining:
             df_comparisons['direct_comparison_value'] = np.nan
 
             self.df_comparisons = df_comparisons
+            # print(f"df_comparisons: {df_comparisons}")
+            # assert False, "done"
 
             # Iterate over three consecutive rows
             # selected_0 is either 0 (agent left) or 1 (neutral) and selected_1 is either 1 or 2 (agent right) (else we terminate)
@@ -415,9 +424,13 @@ class TripletMining:
 
                 # Extract the direct comparison value (selected0=0, selected1=2) if it exists
                 direct_comparison_row = group[(group['selected0'] == 0) & (group['selected1'] == 2)]
+                # Extract the direct comparison value associated with the max_row
+
+
                 direct_comparison_value = None
                 if not direct_comparison_row.empty:
-                    direct_comparison_value = direct_comparison_row.iloc[0]['count_normalized']
+                    # direct_comparison_value = direct_comparison_row.iloc[0]['count_normalized']
+                    direct_comparison_value = max_row['count_normalized']
                     # Store this value in the max_row
                     df_comparisons.loc[max_row.name, 'direct_comparison_value'] = direct_comparison_value
 
@@ -533,7 +546,7 @@ class TripletMining:
                 if len(group) < 3:
                     continue
 
-                # Get the efforts tuples from the first row (all rows in a triplet have the same efforts_tuples)
+                # Get the efforts tuples from the first row (all rows of a triplet have the same efforts_tuples)
                 efforts_tuples = group.iloc[0]['efforts_tuples']
                 efforts_left = efforts_tuples[0]
                 efforts_right = efforts_tuples[1]
@@ -556,15 +569,15 @@ class TripletMining:
                 left_neut_row = group[(group['selected0'] == 0) & (group['selected1'] == 1)]
                 right_neut_row = group[(group['selected0'] == 1) & (group['selected1'] == 2)]
 
-                # Extract count_normalized values (if row exists)
-                left_right_value = left_right_row['count_normalized'].iloc[0] if not left_right_row.empty else 0.0
-                left_neut_value = left_neut_row['count_normalized'].iloc[0] if not left_neut_row.empty else 0.0
-                right_neut_value = right_neut_row['count_normalized'].iloc[0] if not right_neut_row.empty else 0.0
+                # Extract count_normalized values
+                left_right_value = left_right_row['count_normalized'].iloc[0]
+                left_neut_value = left_neut_row['count_normalized'].iloc[0]
+                right_neut_value = right_neut_row['count_normalized'].iloc[0]
 
                 # Populate the comparison values matrices
-                self.matrix_comparison_values_left_right[index_left, index_right] = left_right_value
-                self.matrix_comparison_values_left_neut[index_left, index_right] = left_neut_value
-                self.matrix_comparison_values_right_neut[index_left, index_right] = right_neut_value
+                self.matrix_comparison_values_left_right[index_left, index_right] = 1 - left_right_value
+                self.matrix_comparison_values_left_neut[index_left, index_right] = 1 - left_neut_value
+                self.matrix_comparison_values_right_neut[index_left, index_right] = 1 - right_neut_value
 
                 # Also populate the comparison bool matrices (1 if value exists, 0 otherwise)
                 self.matrix_comparison_bool_left_right[index_left, index_right] = 1.0 if left_right_value > 0.0 else 0.0
@@ -646,23 +659,23 @@ class TripletMining:
 
                     if left_right_alpha == 0 and right_left_alpha == 0:
                         zero_alphas_counter += 1
-                        # print(f"left_right_alpha, right_left_alpha, both alphas zero...counter: {zero_alphas_counter}")
+                        print(f"left_right_alpha, right_left_alpha, both alphas zero...counter: {zero_alphas_counter}")
                         bool_constant_left_right = 0
                         bool_constant_right_left = 0
                     elif left_right_alpha == 0:
-                        # print(f"left_right_alpha: {right_left_alpha}")
+                        print(f"1 left_right_alpha: {right_left_alpha}")
                         bool_constant_left_right = 0
                         bool_constant_right_left = 1
                         unequal_comparison_counter += 1
                         # print(f"unequal comparison counter: {unequal_comparison_counter}")
                     elif right_left_alpha == 0:
-                        # print(f"right_left_alpha: {right_left_alpha}")
+                        print(f"2 right_left_alpha: {right_left_alpha}")
                         bool_constant_left_right = 1
                         bool_constant_right_left = 0
                         unequal_comparison_counter += 1
                         # print(f"unequal comparison counter: {unequal_comparison_counter}")
                     else:
-                        # assert False, "left_right_alpha and right_left_alpha are both non-zero"
+                        print(f"left_right_alpha and right_left_alpha are both non-zero: {left_right_alpha}, {right_left_alpha}")
                         bool_constant_left_right = 1
                         bool_constant_right_left = 1
                         unequal_comparison_counter += 1
@@ -751,6 +764,10 @@ class TripletMining:
                         # print(f"unequal comparison counter: {unequal_comparison_counter}")
 
                     # PyTorch direct tensor indexing for in-place updating
+                    # self.matrix_alpha_right_neut_neut_right[index_left, index_right] += right_neutral_alpha
+                    # self.matrix_bool_right_neut[index_left, index_right] = bool_constant_right_neutral
+                    # self.matrix_alpha_right_neut_neut_right[index_right, index_left] += neutral_right_alpha
+                    # self.matrix_bool_neut_right[index_right, index_left] = bool_constant_neutral_right
                     self.matrix_alpha_right_neut_neut_right[index_left, index_right] += right_neutral_alpha
                     self.matrix_bool_right_neut[index_left, index_right] = bool_constant_right_neutral
                     self.matrix_alpha_right_neut_neut_right[index_right, index_left] += neutral_right_alpha
@@ -764,6 +781,7 @@ class TripletMining:
 
             print(f" Equal comparison counter: {equal_comparison_counter}")
             print(f"Unequal comparison counter: {unequal_comparison_counter}")
+            print(f"total comparison rows: {counter_df_alphas_rows}")
 
 
 
