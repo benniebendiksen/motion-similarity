@@ -242,7 +242,7 @@ def check_gpu_access():
         print("❌ No GPU detected by TensorFlow.")
 
 
-def create_train_val_split(similarity_dicts, val_ratio=0.2):
+def create_train_val_split(similarity_dicts, val_ratio=0.4):
     """
     Create training and validation indices for each animation type.
 
@@ -416,8 +416,8 @@ if __name__ == '__main__':
     # Architecture variant is either from task index or default
     arch_variant = int(config.num_task) if config.num_task else 0
 
-    bool_drop_neutral_exemplar = False
-    bool_fixed_neutral_embedding = False
+    bool_drop_neutral_exemplar = True
+    bool_fixed_neutral_embedding = True
     squared_left_right_euc_dist = False
     squared_class_neut_euc_dist = False
 

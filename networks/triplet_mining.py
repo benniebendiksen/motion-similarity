@@ -201,6 +201,8 @@ class TripletMining:
         Calculate both:
         1. 1D tensor of distances between class embeddings and the neutral embedding
         2. 2D matrix of distances between all class embeddings
+
+        All distances are normalized to the range [0,1]
         """
         try:
             # Determine neutral and modified embeddings
@@ -241,18 +243,109 @@ class TripletMining:
             class_neut_squared_dist = torch.clamp(class_neut_squared_dist, min=0.0)
 
             # Apply sqrt if squared_class_neut_dist is True (notice this is inverted compared to left-right!)
-            # This matches your observation about what works well for training
             if not self.squared_class_neut_euc_dist:
                 epsilon = 1e-12
-                self.tensor_dists_class_neut = torch.sqrt(class_neut_squared_dist + epsilon)
+                class_neut_dist = torch.sqrt(class_neut_squared_dist + epsilon)
             else:
-                self.tensor_dists_class_neut = class_neut_squared_dist
+                class_neut_dist = class_neut_squared_dist
+
+            # ----- NORMALIZATION SECTION -----
+
+            # 1. Normalize left-right distances to [0,1]
+            if left_right_distances.numel() > 100000:  # Check if there's more than one element
+                min_lr_dist = torch.min(left_right_distances)
+                max_lr_dist = torch.max(left_right_distances)
+
+                # Check to avoid division by zero
+                if max_lr_dist > min_lr_dist:
+                    # Normalize to [0,1]
+                    left_right_distances = (left_right_distances - min_lr_dist) / (max_lr_dist - min_lr_dist)
+                else:
+                    # If all distances are the same, set to 0.5 (middle of range)
+                    left_right_distances = torch.ones_like(left_right_distances) * 0.5
+
+            # 2. Normalize class-neutral distances to [0,1]
+            if class_neut_dist.numel() > 100000:  # Check if there's more than one element
+                min_cn_dist = torch.min(class_neut_dist)
+                max_cn_dist = torch.max(class_neut_dist)
+
+                # Check to avoid division by zero
+                if max_cn_dist > min_cn_dist:
+                    # Normalize to [0,1]
+                    normalized_class_neut_dist = (class_neut_dist - min_cn_dist) / (max_cn_dist - min_cn_dist)
+                else:
+                    # If all distances are the same, set to 0.5 (middle of range)
+                    normalized_class_neut_dist = torch.ones_like(class_neut_dist) * 0.5
+
+                # Store the normalized distances
+                self.tensor_dists_class_neut = normalized_class_neut_dist
+            else:
+                # If there's only one element, just store it as is
+                self.tensor_dists_class_neut = class_neut_dist
 
             return left_right_distances
 
         except Exception as e:
             print(f"Error in calculate_distances: {e}")
             raise e
+
+    # def calculate_distances(self, embeddings):
+    #     """
+    #     Calculate both:
+    #     1. 1D tensor of distances between class embeddings and the neutral embedding
+    #     2. 2D matrix of distances between all class embeddings
+    #     """
+    #     try:
+    #         # Determine neutral and modified embeddings
+    #         if self.bool_fixed_neutral_embedding:
+    #             neutral_embedding, modified_embeddings = self.zero_out_neutral_embedding(embeddings)
+    #         else:
+    #             neutral_embedding, modified_embeddings = self.maintain_dynamic_neutral_embedding(embeddings)
+    #
+    #         # Calculate left-right distances between all embeddings
+    #         # Compute the dot product
+    #         dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
+    #
+    #         # Compute the squared norms
+    #         square_norm = torch.sum(modified_embeddings ** 2, dim=1)
+    #
+    #         # Compute pairwise squared Euclidean distances
+    #         left_right_distances = square_norm.unsqueeze(1) + square_norm.unsqueeze(0) - 2.0 * dot_product
+    #
+    #         # Clamp to ensure no negative distances due to floating-point errors
+    #         left_right_distances = torch.clamp(left_right_distances, min=0.0)
+    #
+    #         if not self.squared_left_right_euc_dist:
+    #             # For non-squared distances, compute square root with epsilon for stability
+    #             epsilon = 1e-12
+    #             left_right_distances = torch.sqrt(left_right_distances + epsilon)
+    #
+    #         # Calculate class-neutral distances using similar approach to left-right distances
+    #         # Compute squared norm of neutral embedding
+    #         neutral_square_norm = torch.sum(neutral_embedding ** 2)
+    #
+    #         # Compute the dot product between modified embeddings and neutral embedding
+    #         neutral_dot_product = torch.matmul(modified_embeddings, neutral_embedding)
+    #
+    #         # Compute squared distances using the same formula as left-right
+    #         class_neut_squared_dist = square_norm + neutral_square_norm - 2.0 * neutral_dot_product
+    #
+    #         # Clamp to ensure no negative distances due to floating-point errors
+    #         class_neut_squared_dist = torch.clamp(class_neut_squared_dist, min=0.0)
+    #
+    #         # Apply sqrt if squared_class_neut_dist is True (notice this is inverted compared to left-right!)
+    #         # This matches your observation about what works well for training
+    #         if not self.squared_class_neut_euc_dist:
+    #             epsilon = 1e-12
+    #             self.tensor_dists_class_neut = torch.sqrt(class_neut_squared_dist + epsilon)
+    #         else:
+    #             self.tensor_dists_class_neut = class_neut_squared_dist
+    #
+    #         return left_right_distances
+    #
+    #     except Exception as e:
+    #         print(f"Error in calculate_distances: {e}")
+    #         raise e
 
     def calculate_left_right_distances(self, embeddings):
         """Compute the 2D matrix of distances between all 56 class embeddings."""
@@ -355,178 +448,97 @@ class TripletMining:
             # Check that the Dataframe has the correct number of similarity classes
             assert len(seen_tuples) == self.num_states_drives, (f"incomplete similarity class count in comparisons "
                                                            f"data: {len(seen_tuples)}")
-        #
-        # def _generate_df_alphas(df_comparisons):
-        #     """
-        #     This function processes the raw comparison data in groups of three rows, where each group represents all possible comparisons between three options (left, neutral, right)
-        #
-        #     This method analyzes triplets of comparisons (groups of 3 rows) from the input DataFrame 'df_comparisons',
-        #     where each triplet contains all possible pairwise comparisons between three options (labeled as 0, 1, 2,
-        #     representing left agent, neutral, and right agent, respectively). For each triplet, it:
-        #
-        #     1. Identifies the most preferred pair (highest count_normalized value)
-        #     2. Extracts the direct comparison value between options 0 and 2 when available
-        #     3. Calculates two alpha values for the preferred pair:
-        #        - alpha_positive_1_positive_2: How much more the first element is preferred when paired
-        #          with the second element compared to when it's paired with the third (negative) element
-        #        - alpha_positive_2_positive_1: How much more the second element is preferred when paired
-        #          with the first element compared to when it's paired with the third (negative) element
-        #
-        #     Alpha Value Calculation:
-        #     For a preferred pair (A,B) with third option C:
-        #     - alpha_A_B = count_normalized(A,B) - count_normalized(A,C)
-        #     - alpha_B_A = count_normalized(A,B) - count_normalized(B,C)
-        #
-        #     These alpha values quantify the strength of preference for each element in the pairing, relative to
-        #     their preference when paired with the third element. Higher alpha values indicate a stronger preference
-        #     effect when the two elements are paired together.
-        #
-        #     The resulting DataFrame contains one row per triplet (keeping only the row with maximum count_normalized),
-        #     and includes:
-        #     - Original comparison data (efforts_tuples, selected motions, etc.)
-        #     - Six possible alpha columns (alpha_0_1, alpha_1_0, alpha_0_2, alpha_2_0, alpha_1_2, alpha_2_1)
-        #     - Direct comparison value between options 0 and 2 (direct_02_comparison)
-        #
-        #     This DataFrame provides a comprehensive view of similarity relationships between effort tuples,
-        #     enabling both direct and indirect comparison metrics for distance-based analysis.
-        #
-        #     Returns:
-        #         pandas.DataFrame: DataFrame containing processed comparison data with alpha values
-        #                           and direct comparison metrics
-        #
-        #     df_comparisons:                                 efforts_tuples  selected0  selected1  count  count_normalized selected_motions  alpha_0_2  alpha_2_0  alpha_0_1  alpha_2_1  alpha_1_0  alpha_1_2  direct_comparison_value
-        #                         0     [(-1, -1, -1, 0), (-1, -1, 0, -1)]          0          1      7          0.636364              0_1        0.0        0.0        0.0        0.0        0.0        0.0                      NaN
-        #                         1     [(-1, -1, -1, 0), (-1, -1, 0, -1)]          0          2      0          0.000000              0_2        0.0        0.0        0.0        0.0        0.0        0.0                      NaN
-        #                         2     [(-1, -1, -1, 0), (-1, -1, 0, -1)]          1          2      4          0.363636              1_2        0.0        0.0        0.0        0.0        0.0        0.0                      NaN
-        #                         ...
-        #
-        #     """
-        #     comparisons_list = []
-        #     selection_values = [0, 1, 2]
-        #
-        #     # Initialize new columns for pairwise comparison alpha values (two values created per pairwise comparison)
-        #     df_comparisons['alpha_0_1'] = 0.0
-        #     df_comparisons['alpha_1_0'] = 0.0
-        #     df_comparisons['alpha_0_2'] = 0.0
-        #     df_comparisons['alpha_2_0'] = 0.0
-        #     df_comparisons['alpha_1_2'] = 0.0
-        #     df_comparisons['alpha_2_1'] = 0.0
-        #
-        #     # Add new column for the 0-2 count_normalized (where selected0=0, selected1=2)
-        #     df_comparisons['direct_comparison_value'] = np.nan
-        #
-        #     self.df_comparisons = df_comparisons
-        #
-        #     # Iterate over three consecutive rows
-        #     # selected_0 is either 0 (agent left) or 1 (neutral) and selected_1 is either 1 or 2 (agent right) (else we terminate)
-        #     for i in range(0, len(df_comparisons), 3):
-        #         group = df_comparisons.iloc[i:i + 3]
-        #
-        #         # Find the row within a triplet with the maximum 'count_normalized' value, thereby establishing the
-        #         # positive pair (i.e., selected0 and selected1 which could be (0,1), (0,2) or (1,2)
-        #         max_row = group.loc[group['count_normalized'].idxmax()]
-        #
-        #         # Extract the direct comparison value (selected0=0, selected1=2) if it exists
-        #         direct_comparison_row = group[(group['selected0'] == 0) & (group['selected1'] == 2)]
-        #         # Extract the direct comparison value associated with the max_row
-        #
-        #
-        #         direct_comparison_value = None
-        #         # if not direct_comparison_row.empty:
-        #         #     direct_comparison_value = max_row['count_normalized']
-        #         #     # Store this value in the max_row
-        #         #     df_comparisons.loc[max_row.name, 'direct_comparison_value'] = direct_comparison_value
-        #
-        #         max_selected_0, max_selected_1 = max_row['selected0'], max_row['selected1']
-        #         negative_index = next(x for x in selection_values if x != max_selected_0 and x != max_selected_1)
-        #
-        #         # find the anchor_positive ratio value under the cases in which anchor is each of the positive pair,
-        #         # respectively, and positive is the negative class
-        #         if max_selected_0 == 0:
-        #             # grab 0-negative ratio as 0 is certainly a positive.
-        #             # either 0-2 ratio (0 is positive and 2 is negative / negative_index) if max_selected_1 is 1 (i.e., other positive is 1),
-        #             # else, 0-1 ratio if max_selected_1 is 2
-        #             ratio_first_positive_to_negative = \
-        #                 group.loc[(group['selected0'] == max_selected_0) & (group['selected1'] ==
-        #                                                                     negative_index)].iloc[0][
-        #                     'count_normalized']
-        #             # max_selected_1 being 1 means 2 is the negative index and therefore ratio_first_positive_to_negative is 0-2 ratio:
-        #             # so let's get the 1-2 ratio
-        #             if max_selected_1 == 1:
-        #                 ratio_second_positive_to_negative = \
-        #                     group.loc[(group['selected0'] == max_selected_1) & (group['selected1'] ==
-        #                                                                         negative_index)].iloc[
-        #                         0][
-        #                         'count_normalized']
-        #             # max_selected_1 being 2 means 1 is the negative index and therefore ratio_first_positive_to_negative is 0-1 ratio:
-        #             # so let's get the 1-2 ratio
-        #             elif max_selected_1 == 2:
-        #                 ratio_second_positive_to_negative = \
-        #                     group.loc[(group['selected0'] == negative_index) & (group['selected1'] ==
-        #                                                                         max_selected_1)].iloc[
-        #                         0][
-        #                         'count_normalized']
-        #             else:
-        #                 assert False, "selected1 is not 1 or 2"
-        #
-        #         elif max_selected_0 == 1:
-        #             # mean 1 is a positive, and negative index has to be 0, so 2 is the other positive
-        #             if max_selected_1 == 2:
-        #                 # grab 0-1 ratio
-        #                 ratio_first_positive_to_negative = \
-        #                     group.loc[(group['selected0'] == negative_index) & (group['selected1'] ==
-        #                                                                         max_selected_0)].iloc[
-        #                         0][
-        #                         'count_normalized']
-        #                 # grab 0-2 ratio
-        #                 ratio_second_positive_to_negative = \
-        #                     group.loc[(group['selected0'] == negative_index) & (group['selected1'] ==
-        #                                                                         max_selected_1)].iloc[
-        #                         0][
-        #                         'count_normalized']
-        #             else:
-        #                 assert False, "selected1 is not 1 or 2"
-        #         else:
-        #             assert False, "selected0 is not 0 or 1"
-        #
-        #         # TODO: Alternatively to generating the two possible alpha values for a comparison (e.g., treating selected0 as anchor versus
-        #         # treating selected1 as anchor), we can extract only the dominant alpha value for each comparison (i.e., max difference).
-        #         diff_positive_1_anchor = max_row['count_normalized'] - ratio_first_positive_to_negative
-        #         diff_positive_2_anchor = max_row['count_normalized'] - ratio_second_positive_to_negative
-        #         if ratio_first_positive_to_negative > ratio_second_positive_to_negative:
-        #             alpha_positive_1_positive_2 = diff_positive_1_anchor
-        #             alpha_positive_2_positive_1 = diff_positive_2_anchor
-        #         else:
-        #             alpha_positive_1_positive_2 = diff_positive_2_anchor
-        #             alpha_positive_2_positive_1 = diff_positive_1_anchor
-        #
-        #         if max_row['efforts_tuples'] == '[-1,-1,-1,0]_[0,-1,-1,1]':
-        #             print(f"ALPHAS: {alpha_positive_1_positive_2} . {alpha_positive_2_positive_1}")
-        #
-        #         # Concatenate selected0 and selected1 to pattern match the alpha anchor_positive column
-        #         alpha_selected_0_selected_1_column = f"alpha_{max_selected_0}_{max_selected_1}"
-        #         alpha_selected_1_selected_0_column = f"alpha_{max_selected_1}_{max_selected_0}"
-        #
-        #         df_comparisons.loc[max_row.name, alpha_selected_0_selected_1_column] = alpha_positive_1_positive_2
-        #         df_comparisons.loc[max_row.name, alpha_selected_1_selected_0_column] = alpha_positive_2_positive_1
-        #         comparisons_list.append(df_comparisons.loc[max_row.name])
-        #
-        #     alpha_dataframes = pd.DataFrame(comparisons_list)
-        #     alpha_dataframes.reset_index(drop=True, inplace=True)
-        #
-        #     # Filter out rows where direct_comparison_value is NaN
-        #     # if 'direct_comparison_value' in alpha_dataframes.columns:
-        #     #     # Remove NaN values - only keep rows with a valid direct comparison
-        #     #     alpha_dataframes_filtered = alpha_dataframes.dropna(subset=['direct_comparison_value'])
-        #     #     # If you need to keep all rows but want to indicate which ones have valid direct comparisons:
-        #     #     # alpha_dataframes['has_direct_comparison'] = ~alpha_dataframes['direct_comparison_value'].isna()
-        #     #
-        #     #     # Optionally, you can also rename the column to something more descriptive
-        #     #     alpha_dataframes.rename(columns={'direct_comparison_value': 'direct_02_comparison'}, inplace=True)
-        #     #important for inference script
-        #     self.alpha_dataframes = alpha_dataframes
-        #
-        #     return alpha_dataframes
+
+        def get_all_left_right_comparisons(self):
+            """
+            Creates an easy-to-use data structure containing all left-right comparisons
+            with their inverse values (1 - comparison_value) to use in contrastive loss.
+
+            Returns:
+                dict: Dictionary with keys:
+                    'indices': List of tuples (left_idx, right_idx) for all valid comparisons
+                    'targets': List of target distance values (1 - comparison_value)
+                    'masks': Dictionary with left-right, left-neut, right-neut boolean masks
+                    'values': Dictionary with the original comparison values
+            """
+            # Get all valid left-right comparison pairs
+            valid_pairs = []
+            target_distances = []
+
+            # Dictionary to track masks
+            masks = {
+                'left_right': [],  # Original left-right comparisons
+                'left_neut': [],  # Left-right pairs derived from left-neutral comparisons
+                'right_neut': []  # Left-right pairs derived from right-neutral comparisons
+            }
+
+            # Dictionary to store original comparison values
+            comparison_values = {
+                'left_right': [],
+                'left_neut': [],
+                'right_neut': []
+            }
+
+            # Get dict mappings for reference
+            dict_label_to_id = {class_label: idx for idx, class_label in
+                                enumerate(self.dict_similarity_classes_exemplars.keys())}
+
+            # Process left-right comparisons from the comparison dataframe
+            for idx, row in self.df_comparisons.iterrows():
+                if row['selected0'] == 0 and row['selected1'] == 2:  # This is a left-right comparison
+                    # Get the effort tuples
+                    efforts_tuple = row['efforts_tuples']
+
+                    # Skip if either class is not in valid_indices
+                    if self.valid_indices is not None:
+                        if efforts_tuple[0] not in self.valid_indices or efforts_tuple[1] not in self.valid_indices:
+                            continue
+
+                    # Skip neutral exemplars
+                    if efforts_tuple[0] == (0, 0, 0, 0) or efforts_tuple[1] == (0, 0, 0, 0):
+                        continue
+
+                    # Get indices for this pair
+                    index_left = dict_label_to_id[efforts_tuple[0]]
+                    index_right = dict_label_to_id[efforts_tuple[1]]
+
+                    # Get the comparison value and its inverse (target distance)
+                    comparison_value = row['count_normalized']
+                    target_distance = 1.0 - comparison_value
+
+                    # Store this pair and its target distance
+                    valid_pairs.append((index_left, index_right))
+                    target_distances.append(target_distance)
+
+                    # Track which mask this belongs to
+                    masks['left_right'].append(1)
+                    masks['left_neut'].append(0)
+                    masks['right_neut'].append(0)
+
+                    # Store original comparison value
+                    comparison_values['left_right'].append(comparison_value)
+                    comparison_values['left_neut'].append(0.0)
+                    comparison_values['right_neut'].append(0.0)
+
+            # Also include the matrices for convenience
+            comparison_data = {
+                'indices': valid_pairs,
+                'targets': target_distances,
+                'masks': masks,
+                'values': comparison_values,
+                'matrix_values': {
+                    'left_right': self.matrix_comparison_values_left_right,
+                    'left_neut': self.matrix_comparison_values_left_neut,
+                    'right_neut': self.matrix_comparison_values_right_neut
+                },
+                'matrix_bool': {
+                    'left_right': self.matrix_comparison_bool_left_right,
+                    'left_neut': self.matrix_comparison_bool_left_neut,
+                    'right_neut': self.matrix_comparison_bool_right_neut
+                }
+            }
+
+            return comparison_data
 
         def _generate_df_alphas(df_comparisons):
             """
@@ -556,6 +568,8 @@ class TripletMining:
 
             # Add column for direct comparison between 0-2 (Left-Right)
             df_comparisons['direct_comparison_value'] = np.nan
+            # Add column to indicate most preferred pair
+            df_comparisons['most_preferred_pair'] = None
 
             # important for inference script
             self.df_comparisons = df_comparisons
@@ -583,6 +597,10 @@ class TripletMining:
                 for _, row in group.iterrows():
                     s0, s1 = row['selected0'], row['selected1']
                     pair_values[(s0, s1)] = row['count_normalized']
+
+                    # determine most preferred pair
+                    if row['count_normalized'] == max_row['count_normalized']:
+                        df_comparisons.at[max_row.name, 'most_preferred_pair'] = (s0, s1)
 
                 # Calculate all six alpha values systematically
 
@@ -636,206 +654,6 @@ class TripletMining:
 
             return alpha_dataframes
 
-        # def _populate_alpha_matrices_and_masks(df_alphas):
-        #     """
-        #     Populate the alpha matrices and their corresponding masks based on the data in the comparisons DataFrame.
-        #     Masks indicate if positive pairs (and therefore the two corresponding triplets / alphas) are to be used for loss calculation.
-        #     Valid indices are used to set zeros in the alpha matrices and masks for classes that are not part of the training or validation set.
-        #
-        #     PyTorch version of the original TensorFlow implementation.
-        #
-        #     Args:
-        #        df_alphas: DataFrame with alpha values
-        #
-        #     Returns:
-        #        None
-        #     """
-        #     # Iterate over the rows of the comparisons DataFrame
-        #     counter_df_alphas_rows = 0
-        #     repeat_class_comparison_counter = 0
-        #     equal_comparison_counter = 0
-        #     zero_alphas_counter = 0
-        #     unequal_comparison_counter = 0
-        #     bool_swap_left_right = False
-        #
-        #     # write out df_alphas to csv
-        #     df_alphas.to_csv('py_df_alphas_walking.csv')
-        #
-        #     for index, row in df_alphas.iterrows():
-        #         # print(f"row: {row}")
-        #         counter_df_alphas_rows += 1
-        #         efforts_tuple = row['efforts_tuples']
-        #
-        #         # check that effort tuples correspond to values of self.valid_indices
-        #         # print(f"efforts_tuple: {efforts_tuple[0]}, {efforts_tuple[1]}")
-        #         # print(f"valid_indices: {self.valid_indices}")
-        #
-        #         # Skip if either class is not in valid_indices. A train/val split ensuring mechanism
-        #         if self.valid_indices is not None:
-        #             if efforts_tuple[0] not in self.valid_indices or efforts_tuple[1] not in self.valid_indices:
-        #                 continue
-        #
-        #         # enforce constraint that i < j always corresponds to left, right / i > j to right, left effort_tuples.
-        #         # where labels are efforts_tuple values (efforts_tuple[0] < efforts_tuple[1] based on R's
-        #         # pmin, pmax functions) and i and j are indices to dict_similarity_classes_exemplars.keys()
-        #         if dict_label_to_id[efforts_tuple[0]] > dict_label_to_id[efforts_tuple[1]]:
-        #             row['efforts_tuples'] = [efforts_tuple[1], efforts_tuple[0]]
-        #             bool_swap_left_right = True
-        #
-        #         efforts_left = row['efforts_tuples'][0]
-        #         efforts_right = row['efforts_tuples'][1]
-        #         index_left = dict_label_to_id[efforts_left]
-        #         index_right = dict_label_to_id[efforts_right]
-        #
-        #         ### temporary fix for erroneous similarity class, and for self to self comparison, in comparisons
-        #         ### DataFrame
-        #         if efforts_left == (0, 0, 0, 0) or efforts_left == efforts_right:
-        #             repeat_class_comparison_counter += 1
-        #             print(f"repeat class comparison at indices: {index_left} , {index_right}")
-        #             continue
-        #
-        #         # alpha_tripletid1_tripletid2 denotes one of the two alpha values per triplet as a function of the two most similar cases.
-        #         # For any comparison, left_index < right_index
-        #         # left, right indices indicate location for left, neut anchor_positive alpha with respect to Left,
-        #         # Neutral Matrix (and right, neut anchor_positive alpha with respect to Right, Neutral Matrix)
-        #         # whereas right, left indices indicate location for neut, left anchor_positive alpha and neut,
-        #         # right anchor_positive alpha, respectively.
-        #         if row['alpha_0_2'] != 0:
-        #             # print(f"entered alpha_0_2 with alphas: {row['alpha_0_2']} and {row['alpha_2_0']}")
-        #             # extract the two alpha values for the comparison, abiding by constraint
-        #             left_right_alpha = row['alpha_0_2']
-        #             right_left_alpha = row['alpha_2_0']
-        #
-        #             if bool_swap_left_right:
-        #                 left_right_alpha = row['alpha_2_0']
-        #                 right_left_alpha = row['alpha_0_2']
-        #
-        #             if left_right_alpha == 0 and right_left_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 print(f"left_right_alpha, right_left_alpha, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_left_right = 0
-        #                 bool_constant_right_left = 0
-        #             elif left_right_alpha == 0:
-        #                 print(f"1 left_right_alpha: {left_right_alpha}")
-        #                 bool_constant_left_right = 0
-        #                 bool_constant_right_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif right_left_alpha == 0:
-        #                 print(f"2 right_left_alpha: {right_left_alpha}")
-        #                 bool_constant_left_right = 1
-        #                 bool_constant_right_left = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # print(f"left_right_alpha and right_left_alpha are both non-zero: {left_right_alpha}, {right_left_alpha}")
-        #                 bool_constant_left_right = 1
-        #                 bool_constant_right_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #
-        #             # PyTorch direct tensor indexing for in-place updating
-        #             self.matrix_alpha_left_right_right_left[index_left, index_right] += left_right_alpha
-        #             self.matrix_bool_left_right[index_left, index_right] = bool_constant_left_right
-        #             self.matrix_alpha_left_right_right_left[index_right, index_left] += right_left_alpha
-        #             self.matrix_bool_right_left[index_right, index_left] = bool_constant_right_left
-        #
-        #         elif row['alpha_0_1'] != 0:
-        #             # print(f"entered alpha_0_1 with alphas: {row['alpha_0_1']} and {row['alpha_1_0']}")
-        #             left_neutral_alpha = row['alpha_0_1']
-        #             neutral_left_alpha = row['alpha_1_0']
-        #
-        #             if bool_swap_left_right:
-        #                 # left_neutral_alpha = row['alpha_2_1']
-        #                 # neutral_left_alpha = row['alpha_1_2']
-        #                 left_neutral_alpha = row['alpha_1_0']
-        #                 neutral_left_alpha = row['alpha_0_1']
-        #
-        #             if left_neutral_alpha == 0 and neutral_left_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 # print(f"left_neut, neut_left, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_left_neutral = 0
-        #                 bool_constant_neutral_left = 0
-        #             elif left_neutral_alpha == 0:
-        #                 # print(f"left_neutral_alpha: {neutral_left_alpha}")
-        #                 bool_constant_left_neutral = 0
-        #                 bool_constant_neutral_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif neutral_left_alpha == 0:
-        #                 # print(f"neutral_left_alpha: {neutral_left_alpha}")
-        #                 bool_constant_left_neutral = 1
-        #                 bool_constant_neutral_left = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # assert False, "left_neutral_alpha and neutral_left_alpha are both non-zero"
-        #                 bool_constant_left_neutral = 1
-        #                 bool_constant_neutral_left = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #
-        #             # PyTorch direct tensor indexing for in-place updating
-        #             self.matrix_alpha_left_neut_neut_left[index_left, index_right] += left_neutral_alpha
-        #             self.matrix_bool_left_neut[index_left, index_right] = bool_constant_left_neutral
-        #             self.matrix_alpha_left_neut_neut_left[index_right, index_left] += neutral_left_alpha
-        #             self.matrix_bool_neut_left[index_right, index_left] = bool_constant_neutral_left
-        #
-        #         elif row['alpha_2_1'] != 0:
-        #             # print(f"entered alpha_2_1 with alphas: {row['alpha_2_1']} and {row['alpha_1_2']}")
-        #             right_neutral_alpha = row['alpha_2_1']
-        #             neutral_right_alpha = row['alpha_1_2']
-        #
-        #             if bool_swap_left_right:
-        #                 # right_neutral_alpha = row['alpha_0_1']
-        #                 # neutral_right_alpha = row['alpha_1_0']
-        #                 right_neutral_alpha = row['alpha_1_2']
-        #                 neutral_right_alpha = row['alpha_2_1']
-        #
-        #             if right_neutral_alpha == 0 and neutral_right_alpha == 0:
-        #                 zero_alphas_counter += 1
-        #                 # print(f"right_neut, neut_right, both alphas zero...counter: {zero_alphas_counter}")
-        #                 bool_constant_right_neutral = 0
-        #                 bool_constant_neutral_right = 0
-        #             elif right_neutral_alpha == 0:
-        #                 # print(f"right_neutral_alpha: {neutral_right_alpha}")
-        #                 bool_constant_right_neutral = 0
-        #                 bool_constant_neutral_right = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             elif neutral_right_alpha == 0:
-        #                 # print(f"neutral_right_alpha: {neutral_right_alpha}")
-        #                 bool_constant_right_neutral = 1
-        #                 bool_constant_neutral_right = 0
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #             else:
-        #                 # assert False, "right_neutral_alpha and neutral_right_alpha are both non-zero"
-        #                 bool_constant_right_neutral = 1
-        #                 bool_constant_neutral_right = 1
-        #                 unequal_comparison_counter += 1
-        #                 # print(f"unequal comparison counter: {unequal_comparison_counter}")
-        #
-        #             # PyTorch direct tensor indexing for in-place updating
-        #             # self.matrix_alpha_right_neut_neut_right[index_left, index_right] += right_neutral_alpha
-        #             # self.matrix_bool_right_neut[index_left, index_right] = bool_constant_right_neutral
-        #             # self.matrix_alpha_right_neut_neut_right[index_right, index_left] += neutral_right_alpha
-        #             # self.matrix_bool_neut_right[index_right, index_left] = bool_constant_neutral_right
-        #             self.matrix_alpha_right_neut_neut_right[index_left, index_right] += right_neutral_alpha
-        #             self.matrix_bool_right_neut[index_left, index_right] = bool_constant_right_neutral
-        #             self.matrix_alpha_right_neut_neut_right[index_right, index_left] += neutral_right_alpha
-        #             self.matrix_bool_neut_right[index_right, index_left] = bool_constant_neutral_right
-        #
-        #         # implies equal selection (or no selection) across all three pairs of a triplet
-        #         else:
-        #             equal_comparison_counter += 1
-        #
-        #         bool_swap_left_right = False
-        #
-        #     print(f" Equal comparison counter: {equal_comparison_counter}")
-        #     print(f"Unequal comparison counter: {unequal_comparison_counter}")
-        #     print(f"total comparison rows: {counter_df_alphas_rows}")
-
         def _populate_alpha_matrices_and_masks(df_alphas):
             """
             Populate the alpha matrices and their corresponding masks based on the data in the comparisons DataFrame.
@@ -888,8 +706,11 @@ class TripletMining:
                     print(f"repeat class comparison at indices: {index_left} , {index_right}")
                     continue
 
+                # grab most preferred pair
+                most_preferred_pair = row['most_preferred_pair']
+
                 # Case 1: left and right are most preferable (original case)
-                if row['alpha_0_2'] != 0:
+                if most_preferred_pair == (0, 2):
                     # Extract the two alpha values for the comparison
                     left_right_alpha = row['alpha_0_2']
                     right_left_alpha = row['alpha_2_0']
@@ -923,7 +744,7 @@ class TripletMining:
                     self.matrix_bool_right_left[index_right, index_left] = bool_constant_right_left
 
                 # Case 2: left and neutral are most preferable
-                elif row['alpha_0_1'] != 0:
+                elif most_preferred_pair == (1, 2):
                     # Instead of left-neutral alphas, extract the left-right alphas present in the row
                     # These are already calculated during _generate_df_alphas() for all cases
                     left_right_alpha = row[
@@ -961,7 +782,7 @@ class TripletMining:
                     self.matrix_bool_neut_left[index_right, index_left] = bool_constant_right_left
 
                 # Case 3: right and neutral are most preferable
-                elif row['alpha_2_1'] != 0:
+                elif most_preferred_pair == (0, 1):
                     # Extract left-right alphas instead of right-neutral alphas
                     left_right_alpha = row[
                         'alpha_0_2']  # Alpha for left compared to right when right-neutral was preferred

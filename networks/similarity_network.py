@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import r2_score
 from scipy import stats
+import random
 
 logging.basicConfig(level=logging.DEBUG,
                     filename=os.path.basename(__file__) + '.log',
@@ -19,6 +20,35 @@ logging.basicConfig(level=logging.DEBUG,
                     style="{")
 logging.basicConfig(filename='training.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 logging.getLogger('tensorflow').setLevel(logging.CRITICAL)
+
+
+# Add seed function for deterministic behavior
+def set_seed(seed=42):
+    """
+    Set seed for reproducibility across all random number generators.
+
+    Args:
+        seed (int): Seed value to use for deterministic behavior.
+    """
+    # Python's built-in random module
+    random.seed(seed)
+
+    # NumPy
+    np.random.seed(seed)
+
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+
+    # Additional settings for complete determinism
+    # Note: These may slow down training
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # Log the seed setting
+    logging.info(f"Random seed set to {seed} for deterministic behavior")
+    print(f"Random seed set to {seed} for deterministic behavior")
 
 
 class TrainingLogger(callbacks.Callback):
@@ -167,12 +197,17 @@ class SimilarityNetwork:
         lr_scheduler_type: Type of learning rate scheduler ('plateau', 'cosine', 'step').
         use_perception_loss: Whether to use the enhanced perception-aligned loss.
         use_adaptive_distance: Whether to use the adaptive distance module.
+        seed: Seed for random number generation to ensure reproducibility.
     """
 
     def __init__(self, train_loader, validation_loader, test_loader, checkpoint_root_dir, triplet_modules,
                  architecture_variant, config, val_triplet_modules=None, lr_scheduler_type='plateau',
-                 use_perception_loss=True, use_adaptive_distance=True):
+                 use_perception_loss=True, use_adaptive_distance=True, seed=42):
         super().__init__()
+
+        # Set random seed for reproducibility
+        set_seed(seed)
+
         self.config = config
         self.train_loader = train_loader
         self.validation_loader = validation_loader
@@ -541,7 +576,7 @@ class SimilarityNetwork:
         """
         best_loss = float('inf')
         best_correlation = -1.0
-        validation_frequency = 5  # Validate every N epochs
+        validation_frequency = 1  # Validate every N epochs
 
         for epoch in range(self.config.n_similarity_epochs):
             self.logger.on_epoch_begin(epoch)
@@ -590,17 +625,6 @@ class SimilarityNetwork:
             self.history['learning_rate'].append(self.optimizer.param_groups[0]['lr'])
 
             print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}")
-            # Calculate correlation metrics if using perception loss
-            # if self.use_perception_loss:
-            #     correlation_metrics = self.calculate_correlation_metrics(
-            #         self.train_loader,
-            #         self.train_triplet_modules
-            #     )
-            #
-            #     correlation = correlation_metrics['pearson_correlation']
-            #     r2 = correlation_metrics['r2_score']
-            #
-            #     print(f"Training Correlation: {correlation:.4f}, R²: {r2:.4f}, Pairs: {correlation_metrics['num_pairs']}")
 
             # Validation phase (run periodically to save time)
             run_validation = (epoch + 1) % validation_frequency == 0 or epoch == 0 or epoch == self.config.n_similarity_epochs - 1

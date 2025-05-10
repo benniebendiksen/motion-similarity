@@ -703,8 +703,11 @@ def main(pad_raw_features=True):
     architecture_variant = 0
     # checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                               f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
+    # checkpoint_path = os.path.join(config.checkpoint_root_dir,
+    #                                f"{architecture_variant}_similarity_model_weights_epoch_032.pt")
+    # to load the correlation-optimized (perceptual error without adaptive loss) model:
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_032.pt")
+                                   f"{architecture_variant}_best_correlation_epoch_105.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False

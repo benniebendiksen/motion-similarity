@@ -279,11 +279,12 @@ def create_triplet_module(anim_name, bool_drop_neutral_exemplar, bool_fixed_neut
 
 def load_model(checkpoint_path, architecture_variant, config, data_loader, triplet_module):
     """
-    Load a trained similarity network model from a PyTorch checkpoint file.
+    Load a trained similarity network model from a PyTorch checkpoint file,
+    handling both standard models and perception-aligned models with adaptive distance.
 
     Args:
         checkpoint_path: Path to the saved model weights (.pt file)
-        architecture_variant: Architecture variant number for model configuration
+        architecture_variant: Architecture variant number
         config: Configuration object containing model parameters
         data_loader: Data loader object for model initialization
         triplet_module: Triplet module for model initialization
@@ -291,7 +292,43 @@ def load_model(checkpoint_path, architecture_variant, config, data_loader, tripl
     Returns:
         Loaded and initialized network model ready for inference
     """
-    # Create and load the similarity network
+    # Load checkpoint to inspect metadata without initializing the model yet
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+        print(f"Loaded checkpoint: {checkpoint_path}")
+
+        # Check if this is a perception-aligned model
+        is_perception_model = False
+        use_adaptive_distance = False
+
+        if 'use_perception_loss' in checkpoint:
+            is_perception_model = checkpoint['use_perception_loss']
+        # For backward compatibility with older checkpoints that don't have this flag
+        elif 'correlation' in checkpoint and checkpoint['correlation'] is not None:
+            is_perception_model = True
+        # Check if filename contains "best_correlation" as a heuristic
+        elif 'best_correlation' in checkpoint_path:
+            is_perception_model = True
+
+        if 'use_adaptive_distance' in checkpoint:
+            use_adaptive_distance = checkpoint['use_adaptive_distance']
+
+        print(
+            f"Detected model properties: perception_model={is_perception_model}, adaptive_distance={use_adaptive_distance}")
+
+        # If available, show correlation metrics from the checkpoint
+        if 'correlation' in checkpoint and checkpoint['correlation'] is not None:
+            print(f"Model correlation: {checkpoint['correlation']:.4f}")
+        if 'r2_score' in checkpoint and checkpoint['r2_score'] is not None:
+            print(f"Model R²: {checkpoint['r2_score']:.4f}")
+
+    except Exception as e:
+        print(f"Error examining checkpoint: {e}")
+        # Default to standard model if checkpoint examination fails
+        is_perception_model = False
+        use_adaptive_distance = False
+
+    # Create and initialize the similarity network with appropriate settings
     similarity_network = SimilarityNetwork(
         train_loader=data_loader,
         validation_loader=data_loader,
@@ -299,30 +336,46 @@ def load_model(checkpoint_path, architecture_variant, config, data_loader, tripl
         checkpoint_root_dir=config.checkpoint_root_dir,
         triplet_modules=[triplet_module],
         architecture_variant=architecture_variant,
-        config=config
+        config=config,
+        # Set these parameters based on the checkpoint
+        use_perception_loss=is_perception_model,
+        use_adaptive_distance=use_adaptive_distance
     )
 
-    # Load the model state dict WITHOUT weights_only parameter
+    # Now try to load the state dict into the properly initialized model
     try:
-        # Try first with weights_only=False (safer for backward compatibility)
-        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
         similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Model loaded from {checkpoint_path} with weights_only=False")
+        print(f"Successfully loaded model weights")
     except Exception as e:
-        print(f"Error loading with weights_only=False: {e}")
-        # Fall back to directly loading state dict
-        try:
-            checkpoint = torch.load(checkpoint_path)
-            similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
-            print(f"Model loaded from {checkpoint_path} with default loading")
-        except Exception as e2:
-            print(f"Error with default loading: {e2}")
-            # As a last resort, try map_location
-            checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-            similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
-            print(f"Model loaded from {checkpoint_path} with map_location=cpu")
+        print(f"Error loading state dict: {e}")
+        # Try prefix adjustment for models saved with EnhancedSimilarityNetwork
+        if use_adaptive_distance:
+            try:
+                # If original model was saved without the base_network prefix, but we're loading with it
+                new_state_dict = {}
+                for k, v in checkpoint['model_state_dict'].items():
+                    if k.startswith('base_network.'):
+                        new_state_dict[k] = v
+                    else:
+                        new_state_dict[f'base_network.{k}'] = v
 
+                similarity_network.network.load_state_dict(new_state_dict)
+                print(f"Successfully loaded model weights with prefix adjustment")
+            except Exception as nested_e:
+                print(f"Error with prefix adjustment: {nested_e}")
+                # As a fallback, try with strict=False
+                try:
+                    similarity_network.network.load_state_dict(
+                        checkpoint['model_state_dict'], strict=False)
+                    print(f"Loaded model weights with strict=False (some weights may be missing)")
+                except Exception as last_e:
+                    print(f"Critical error loading model: {last_e}")
+                    raise
+
+    # Set to evaluation mode
     similarity_network.network.eval()
+
     return similarity_network.network
 
 
@@ -729,7 +782,6 @@ def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
 
     # Skip neutral exemplars
     if effort1 == (0, 0, 0, 0) or effort2 == (0, 0, 0, 0):
-        print(f"Skipping neutral exemplars for {key1} and {key2}")
         return None
 
     # Only process pairs from the same animation type
@@ -837,13 +889,13 @@ def main():
     architecture_variant = 0
     #checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                               f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
-    # checkpoint_path = os.path.join(config.checkpoint_root_dir,
-    #                                f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_005.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_100.pt")
+    # checkpoint_path = os.path.join(config.checkpoint_root_dir,
+    #                                f"{architecture_variant}_best_correlation_epoch_050.pt")
 
-    bool_drop_neutral_exemplar = False
-    bool_fixed_neutral_embedding = False
+    bool_drop_neutral_exemplar = True
+    bool_fixed_neutral_embedding = True
     squared_left_right_euc_dist = False
     squared_class_neut_euc_dist = False
 
@@ -1092,140 +1144,6 @@ def main():
         f"OVERALL CONCLUSION: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception across all animations")
     print("=" * 70)
 
-# def main():
-#     """
-#     Main execution function that analyzes each animation type separately:
-#     1. Load and process data for the animation type
-#     2. Generate embeddings using a trained neural network
-#     3. Extract variable-length raw features directly from pickle files
-#     4. Calculate L2 distances for embeddings and geodesic distances for raw features
-#     5. Analyze which approach better correlates with human perception
-#     """
-#     # Initialize configuration
-#     config = Config()
-#
-#     # Set up paths and model parameters
-#     architecture_variant = 0
-#     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-#                                    f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
-#
-#     bool_drop_neutral_exemplar = False
-#     bool_fixed_neutral_embedding = False
-#     squared_left_right_euc_dist = False
-#     squared_class_neut_euc_dist = True
-#
-#     # Animation types to process
-#     animations = ["walking", "pointing", "picking"]
-#
-#     for anim_name in animations:
-#         print(f"\n{'=' * 70}")
-#         print(f"PROCESSING ANIMATION: {anim_name.upper()}")
-#         print(f"{'=' * 70}")
-#         print(f"This analysis will evaluate which distance metric better correlates with human perception")
-#         print(f"for the {anim_name} animation type.\n")
-#
-#         # PART 1: Create triplet module for this animation
-#         print("\n1. CREATING TRIPLET MODULE")
-#         print("-" * 50)
-#         triplet_module = create_triplet_module(
-#             anim_name,
-#             bool_drop_neutral_exemplar,
-#             bool_fixed_neutral_embedding,
-#             squared_left_right_euc_dist,
-#             squared_class_neut_euc_dist,
-#             config
-#         )
-#         print(f"Created triplet module for {anim_name}")
-#
-#         # PART 2: Load data and generate embeddings
-#         print("\n2. LOADING DATA AND GENERATING EMBEDDINGS")
-#         print("-" * 50)
-#
-#         # Load similarity data for this animation
-#         anim_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, anim_name, config)
-#
-#         # Store original dictionary for raw feature extraction
-#         original_anim_similarity_dict = anim_similarity_dict_partition["train"]
-#
-#         # Create a balanced copy for embedding generation
-#         balanced_anim_similarity_dict = dict(original_anim_similarity_dict)  # Deep copy
-#         balanced_anim_similarity_dict = osd.balance_single_exemplar_similarity_classes_by_frame_count(
-#             [balanced_anim_similarity_dict], 137)[0]
-#
-#         # Create dataloader for the balanced dictionary
-#         balanced_data_loader = SimilarityDataLoader([balanced_anim_similarity_dict], config, False)
-#
-#         # Load model
-#         model = load_model(checkpoint_path, architecture_variant, config, balanced_data_loader, triplet_module)
-#
-#         # Generate embeddings
-#         embeddings = generate_embeddings_from_dataloader(model, balanced_data_loader, balanced_anim_similarity_dict, anim_name)
-#
-#         # PART 3: Extract raw features
-#         print("\n3. EXTRACTING RAW FEATURES")
-#         print("-" * 50)
-#         raw_features = get_raw_features_without_dataloader(anim_name, config)
-#
-#         # PART 4: Calculate distances
-#         print("\n4. CALCULATING DISTANCES")
-#         print("-" * 50)
-#
-#         # Calculate L2 distances for embeddings
-#         embedding_distances = calculate_pairwise_distances(embeddings)
-#
-#         # Calculate geodesic distances for raw features
-#         geodesic_distances = compute_geodesic_distances(raw_features)
-#
-#         # PART 5: Analyze relationships with human perception
-#         print("\n5. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION")
-#         print("-" * 50)
-#
-#         # Collect distances and corresponding inverse comparison values
-#         print("\nCollecting distance and inverse comparison value pairs...")
-#         embedding_dist, embedding_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
-#             embedding_distances, triplet_module, get_inverse_direct_comparison_value
-#         )
-#
-#         geo_dist, geo_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
-#             geodesic_distances, triplet_module, get_inverse_direct_comparison_value
-#         )
-#
-#         # Count valid pairs (with human ratings)
-#         valid_embedding_pairs = sum(1 for v in embedding_inverse_comparison_values if v is not None)
-#         valid_geo_pairs = sum(1 for v in geo_inverse_comparison_values if v is not None)
-#
-#         print(f"Found {valid_embedding_pairs} embedding pairs with human ratings")
-#         print(f"Found {valid_geo_pairs} geodesic pairs with human ratings")
-#
-#         # Debug: Print first 5 pairs to verify distances
-#         print("\nDEBUG - Sample distance pairs going into analysis:")
-#         for i in range(min(5, len(embedding_dist))):
-#             if embedding_inverse_comparison_values[i] is not None:
-#                 print(
-#                     f"Embedding pair {i}: distance={embedding_dist[i]:.6f}, alpha={embedding_inverse_comparison_values[i]:.6f}")
-#
-#         for i in range(min(5, len(geo_dist))):
-#             if geo_inverse_comparison_values[i] is not None:
-#                 print(f"Geodesic pair {i}: distance={geo_dist[i]:.6f}, alpha={geo_inverse_comparison_values[i]:.6f}")
-#
-#         # Compare relationship between distances and human perception
-#         comparison_results = compare_distance_inverse_comparison_value_relationships(
-#             embedding_dist, embedding_inverse_comparison_values,
-#             geo_dist, geo_inverse_comparison_values,
-#             method="geodesic"
-#         )
-#
-#         # Print final analysis results
-#         print("\n" + "=" * 70)
-#         print(f"FINAL ANALYSIS FOR {anim_name.upper()}: EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
-#         print("=" * 70 + "\n")
-#         print(comparison_results['output_text'])
-#
-#         # Print concise conclusion
-#         print("\n" + "=" * 70)
-#         print(f"CONCLUSION FOR {anim_name.upper()}: {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
-#         print("=" * 70)
-
-
 if __name__ == "__main__":
     main()
+
