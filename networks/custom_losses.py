@@ -205,7 +205,20 @@ def calculate_integrated_perception_loss(y_true, y_pred, triplet_mining, adaptiv
     # Calculate distances between embeddings
     if adaptive_distance_module is not None:
         # Use adaptive distance metric
-        classes_distances = adaptive_distance_module.pairwise_distances(y_pred)
+        # Make sure the number of embeddings matches the matrix size
+        expected_size = triplet_mining.matrix_alpha_left_right_right_left.shape[0]
+
+        # If we're using dropout for neutral embedding or have a different size
+        if triplet_mining.bool_drop_neutral_exemplar:
+            # Use all embeddings since we dropped neutral
+            classes_distances = adaptive_distance_module.pairwise_distances(y_pred)
+        else:
+            # Skip the first embedding (neutral) if it's not dropped
+            # Make sure input shapes match matrix dimensions
+            if y_pred.shape[0] > expected_size:
+                classes_distances = adaptive_distance_module.pairwise_distances(y_pred[1:])
+            else:
+                classes_distances = adaptive_distance_module.pairwise_distances(y_pred)
     else:
         # Use standard Euclidean distance
         classes_distances = triplet_mining.calculate_distances(y_pred)

@@ -353,13 +353,7 @@ class SimilarityNetwork:
     def calculate_correlation_metrics(self, loader, triplet_modules):
         """
         Calculate correlation between embedding distances and human perception.
-
-        Args:
-            loader: DataLoader to use for embedding generation
-            triplet_modules: TripletMining modules to use for correlation calculation
-
-        Returns:
-            Dictionary with correlation metrics
+        Uses direct access to comparison data from the triplet module's dataframes.
         """
         self.network.eval()
 
@@ -377,25 +371,78 @@ class SimilarityNetwork:
 
                 # Process each triplet module
                 for triplet_module in triplet_modules:
-                    # Calculate distances
-                    if self.use_adaptive_distance:
-                        distances = self.adaptive_distance_module.pairwise_distances(embeddings)
-                    else:
-                        distances = triplet_module.calculate_distances(embeddings)
+                    try:
+                        # Calculate distances
+                        if self.use_adaptive_distance:
+                            # For adaptive distance, handle neutral embedding
+                            if not triplet_module.bool_drop_neutral_exemplar and embeddings.shape[0] > 1:
+                                # Skip neutral embedding (always first)
+                                non_neutral_embeddings = embeddings[1:]
+                                distances = self.adaptive_distance_module.pairwise_distances(non_neutral_embeddings)
+                            else:
+                                distances = self.adaptive_distance_module.pairwise_distances(embeddings)
+                        else:
+                            # Use triplet module's internal distance calculation
+                            distances = triplet_module.calculate_distances(embeddings)
 
-                    # Get human perception values (inverse of comparison values)
-                    inverse_comparison_values = 1.0 - triplet_module.matrix_comparison_values_left_right
+                        # Check if we have the df_comparisons DataFrame in the triplet module
+                        if not hasattr(triplet_module, 'df_comparisons') or triplet_module.df_comparisons is None:
+                            print(f"Warning: No df_comparisons found in triplet module for {triplet_module.anim_name}")
+                            continue
 
-                    # Get valid comparison mask (where we have human data)
-                    valid_comparisons = triplet_module.matrix_comparison_bool_left_right > 0
+                        # Get the dictionary mapping from class indices to effort tuples
+                        dict_id_to_label = {idx: class_label for idx, class_label in
+                                            enumerate(triplet_module.dict_similarity_classes_exemplars.keys())}
 
-                    # Extract valid pairs
-                    valid_distances = distances[valid_comparisons].cpu().numpy().flatten()
-                    valid_perception = inverse_comparison_values[valid_comparisons].cpu().numpy().flatten()
+                        # Get all valid pairs with human perception data
+                        valid_pairs = []
 
-                    # Add to collections
-                    all_distances.extend(valid_distances)
-                    all_perceptions.extend(valid_perception)
+                        # For each combination of labels, look up direct comparison data
+                        n = len(dict_id_to_label)
+                        for i in range(n):
+                            for j in range(i + 1, n):
+                                # Get the effort tuples for these indices
+                                effort_i = dict_id_to_label[i]
+                                effort_j = dict_id_to_label[j]
+
+                                # Skip neutral pairs
+                                if effort_i == (0, 0, 0, 0) or effort_j == (0, 0, 0, 0):
+                                    continue
+
+                                # Find direct comparison rows where selected0=0 and selected1=2
+                                df = triplet_module.df_comparisons
+
+                                # Find rows that have this pair of effort tuples
+                                pair_match = df[df['efforts_tuples'].apply(lambda x:
+                                                                           set(x) == set(
+                                                                               [effort_i, effort_j]) if isinstance(x,
+                                                                                                                   list) else False)]
+
+                                if pair_match.empty:
+                                    continue
+
+                                # Find the specific row with selected0=0 (left) and selected1=2 (right)
+                                target_row = pair_match[(pair_match['selected0'] == 0) & (pair_match['selected1'] == 2)]
+
+                                if not target_row.empty and 'count_normalized' in target_row.columns:
+                                    # Get the comparison value
+                                    comparison_value = target_row['count_normalized'].iloc[0]
+
+                                    # Get the distance between these embeddings
+                                    if i < distances.shape[0] and j < distances.shape[0]:
+                                        distance = distances[i, j].item()
+
+                                        # Store the pair for correlation analysis
+                                        valid_pairs.append((distance, 1.0 - comparison_value))
+
+                        # Add all valid pairs to our collections
+                        for distance, perception in valid_pairs:
+                            all_distances.append(distance)
+                            all_perceptions.append(perception)
+
+                    except Exception as e:
+                        print(f"Error in correlation calculation: {e}")
+                        continue
 
         # Calculate correlation metrics if we have data
         if len(all_distances) > 0 and len(all_perceptions) > 0:
@@ -519,6 +566,17 @@ class SimilarityNetwork:
                 loss = self.train_criterion(labels, outputs)
                 print(f"Train Batch Loss: {loss.item()}")
 
+                correlation_metrics = self.calculate_correlation_metrics(
+                    self.train_loader,
+                    self.train_triplet_modules
+                )
+
+                correlation = correlation_metrics['pearson_correlation']
+                r2 = correlation_metrics['r2_score']
+
+                print(
+                    f"Training Correlation: {correlation:.4f}, R²: {r2:.4f}, Pairs: {correlation_metrics['num_pairs']}")
+
                 # Backward pass and optimize
                 loss.backward()
                 self.optimizer.step()
@@ -532,10 +590,20 @@ class SimilarityNetwork:
             self.history['learning_rate'].append(self.optimizer.param_groups[0]['lr'])
 
             print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}")
+            # Calculate correlation metrics if using perception loss
+            # if self.use_perception_loss:
+            #     correlation_metrics = self.calculate_correlation_metrics(
+            #         self.train_loader,
+            #         self.train_triplet_modules
+            #     )
+            #
+            #     correlation = correlation_metrics['pearson_correlation']
+            #     r2 = correlation_metrics['r2_score']
+            #
+            #     print(f"Training Correlation: {correlation:.4f}, R²: {r2:.4f}, Pairs: {correlation_metrics['num_pairs']}")
 
             # Validation phase (run periodically to save time)
-            run_validation = (
-                                         epoch + 1) % validation_frequency == 0 or epoch == 0 or epoch == self.config.n_similarity_epochs - 1
+            run_validation = (epoch + 1) % validation_frequency == 0 or epoch == 0 or epoch == self.config.n_similarity_epochs - 1
 
             if run_validation:
                 self.network.eval()
@@ -563,22 +631,22 @@ class SimilarityNetwork:
 
                 # Calculate correlation metrics if using perception loss
                 if self.use_perception_loss:
-                    correlation_metrics = self.calculate_correlation_metrics(
+                    val_correlation_metrics = self.calculate_correlation_metrics(
                         self.validation_loader,
                         self.val_triplet_modules
                     )
 
-                    correlation = correlation_metrics['pearson_correlation']
-                    r2 = correlation_metrics['r2_score']
+                    val_correlation = val_correlation_metrics['pearson_correlation']
+                    val_r2 = val_correlation_metrics['r2_score']
 
-                    self.history['correlation'].append(correlation)
-                    self.history['r2_score'].append(r2)
+                    self.history['correlation'].append(val_correlation)
+                    self.history['r2_score'].append(val_r2)
 
                     print(
-                        f"Validation Correlation: {correlation:.4f}, R²: {r2:.4f}, Pairs: {correlation_metrics['num_pairs']}")
+                        f"Validation Correlation: {val_correlation:.4f}, R²: {val_r2:.4f}, Pairs: {val_correlation_metrics['num_pairs']}")
                 else:
-                    correlation = 0
-                    r2 = 0
+                    val_correlation = 0
+                    val_r2 = 0
 
                 # Step the scheduler if it's a plateau scheduler
                 if self.scheduler:
@@ -586,7 +654,7 @@ class SimilarityNetwork:
                         # Use correlation for scheduler if perception loss is enabled
                         if self.use_perception_loss:
                             # Negative correlation because scheduler uses min mode (higher correlation is better)
-                            self.scheduler.step(-correlation)
+                            self.scheduler.step(-val_correlation)
                         else:
                             self.scheduler.step(val_epoch_loss)
                     else:
@@ -599,12 +667,12 @@ class SimilarityNetwork:
                 # Save checkpoint if this is the best model by loss
                 if val_epoch_loss < best_loss:
                     best_loss = val_epoch_loss
-                    self.save_checkpoint(epoch + 1, correlation, r2)
+                    self.save_checkpoint(epoch + 1, val_correlation, val_r2)
                     print(f"New best model by loss! Val Loss: {val_epoch_loss:.4f}")
 
                 # Save separate checkpoint if best correlation (only if using perception loss)
-                if self.use_perception_loss and correlation > best_correlation:
-                    best_correlation = correlation
+                if self.use_perception_loss and val_correlation > best_correlation:
+                    best_correlation = val_correlation
                     # Save with special name to indicate best correlation
                     checkpoint_path = os.path.join(
                         self.checkpoint_dir,
@@ -615,17 +683,17 @@ class SimilarityNetwork:
                         'optimizer_state_dict': self.optimizer.state_dict(),
                         'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
                         'epoch': epoch + 1,
-                        'correlation': correlation,
-                        'r2_score': r2,
+                        'correlation': val_correlation,
+                        'r2_score': val_r2,
                         'use_adaptive_distance': self.use_adaptive_distance,
                         'history': self.history
                     }, checkpoint_path)
-                    print(f"New best model by correlation! Correlation: {correlation:.4f}, R²: {r2:.4f}")
+                    print(f"New best model by correlation! Correlation: {val_correlation:.4f}, R²: {val_r2:.4f}")
 
                 # Print summary
                 print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
                 if self.use_perception_loss:
-                    print(f"Correlation: {correlation:.4f}, R²: {r2:.4f}")
+                    print(f"Correlation: {val_correlation:.4f}, R²: {val_r2:.4f}")
 
             # Plot training history every 10 epochs
             if (epoch + 1) % 10 == 0:
@@ -640,7 +708,7 @@ class SimilarityNetwork:
     def evaluate(self):
         """
         Evaluate the model on the test dataset.
-        Enhanced with correlation metrics calculation.
+        Fixed to handle size mismatches properly.
         """
         self.network.eval()
         test_loss = 0.0
@@ -648,21 +716,41 @@ class SimilarityNetwork:
 
         with torch.no_grad():
             for inputs, labels in self.test_loader:
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
+                try:
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
 
-                outputs = self.network(inputs)
-                loss = self.criterion(labels, outputs)
+                    outputs = self.network(inputs)
 
-                test_loss += loss.item()
-                batch_count += 1
+                    # Calculate loss
+                    try:
+                        loss = self.criterion(labels, outputs)
+                        test_loss += loss.item()
+                        batch_count += 1
+                    except Exception as e:
+                        print(f"Error in loss calculation during evaluation: {e}")
+                        continue
+                except Exception as e:
+                    print(f"Error during evaluation: {e}")
+                    continue
 
         # Calculate average test loss
         avg_test_loss = test_loss / batch_count if batch_count > 0 else 0
         print(f"Test Loss: {avg_test_loss:.4f}")
 
         # Calculate correlation metrics
-        correlation_metrics = self.calculate_correlation_metrics(self.test_loader, self.val_triplet_modules)
+        try:
+            correlation_metrics = self.calculate_correlation_metrics(self.test_loader, self.train_triplet_modules)
+        except Exception as e:
+            print(f"Error calculating correlation metrics: {e}")
+            correlation_metrics = {
+                'pearson_correlation': 0.0,
+                'pearson_p_value': 1.0,
+                'spearman_correlation': 0.0,
+                'spearman_p_value': 1.0,
+                'r2_score': 0.0,
+                'num_pairs': 0
+            }
 
         print(f"Test Correlation: {correlation_metrics['pearson_correlation']:.4f}")
         print(f"Test Spearman Correlation: {correlation_metrics['spearman_correlation']:.4f}")

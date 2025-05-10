@@ -1065,9 +1065,9 @@ class TripletMining:
                 right_neut_value = right_neut_row['count_normalized'].iloc[0]
 
                 # Populate the comparison values matrices
-                self.matrix_comparison_values_left_right[index_left, index_right] = 1 - left_right_value
-                self.matrix_comparison_values_left_neut[index_left, index_right] = 1 - left_neut_value
-                self.matrix_comparison_values_right_neut[index_left, index_right] = 1 - right_neut_value
+                self.matrix_comparison_values_left_right[index_left, index_right] = left_right_value
+                self.matrix_comparison_values_left_neut[index_left, index_right] = left_neut_value
+                self.matrix_comparison_values_right_neut[index_left, index_right] = right_neut_value
 
                 # Also populate the comparison bool matrices (1 if value exists, 0 otherwise)
                 self.matrix_comparison_bool_left_right[index_left, index_right] = 1.0 if left_right_value > 0.0 else 0.0

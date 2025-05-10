@@ -244,6 +244,39 @@ def create_triplet_module(anim_name, bool_drop_neutral_exemplar, bool_fixed_neut
     return triplet_module
 
 
+# def load_model(checkpoint_path, architecture_variant, config, data_loader, triplet_module):
+#     """
+#     Load a trained similarity network model from a PyTorch checkpoint file.
+#
+#     Args:
+#         checkpoint_path: Path to the saved model weights (.pt file)
+#         architecture_variant: Architecture variant number for model configuration
+#         config: Configuration object containing model parameters
+#         data_loader: Data loader object for model initialization
+#         triplet_module: Triplet module for model initialization
+#
+#     Returns:
+#         Loaded and initialized network model ready for inference
+#     """
+#     # Create and load the similarity network
+#     similarity_network = SimilarityNetwork(
+#         train_loader=data_loader,
+#         validation_loader=data_loader,
+#         test_loader=data_loader,
+#         checkpoint_root_dir=config.checkpoint_root_dir,
+#         triplet_modules=[triplet_module],
+#         architecture_variant=architecture_variant,
+#         config=config
+#     )
+#
+#     # Load only the model state dict and not the optimizer state dict
+#     checkpoint = torch.load(checkpoint_path, weights_only=True)
+#     similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
+#     similarity_network.network.eval()
+#     print(f"Model loaded from {checkpoint_path}")
+#
+#     return similarity_network.network
+
 def load_model(checkpoint_path, architecture_variant, config, data_loader, triplet_module):
     """
     Load a trained similarity network model from a PyTorch checkpoint file.
@@ -269,12 +302,27 @@ def load_model(checkpoint_path, architecture_variant, config, data_loader, tripl
         config=config
     )
 
-    # Load only the model state dict and not the optimizer state dict
-    checkpoint = torch.load(checkpoint_path, weights_only=True)
-    similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
-    similarity_network.network.eval()
-    print(f"Model loaded from {checkpoint_path}")
+    # Load the model state dict WITHOUT weights_only parameter
+    try:
+        # Try first with weights_only=False (safer for backward compatibility)
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Model loaded from {checkpoint_path} with weights_only=False")
+    except Exception as e:
+        print(f"Error loading with weights_only=False: {e}")
+        # Fall back to directly loading state dict
+        try:
+            checkpoint = torch.load(checkpoint_path)
+            similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
+            print(f"Model loaded from {checkpoint_path} with default loading")
+        except Exception as e2:
+            print(f"Error with default loading: {e2}")
+            # As a last resort, try map_location
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+            similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
+            print(f"Model loaded from {checkpoint_path} with map_location=cpu")
 
+    similarity_network.network.eval()
     return similarity_network.network
 
 
@@ -792,7 +840,7 @@ def main():
     # checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                                f"{architecture_variant}_similarity_model_weights_epoch_033.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_200.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_005.pt")
 
     bool_drop_neutral_exemplar = False
     bool_fixed_neutral_embedding = False

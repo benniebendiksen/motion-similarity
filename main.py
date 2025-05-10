@@ -475,10 +475,10 @@ if __name__ == '__main__':
         val_triplet_modules.append(val_triplet)
 
     # Modify triplet modules if using perception loss
-    if args.use_perception_loss:
-        print("Using enhanced perception-aligned loss - modifying triplet mining modules...")
-        train_triplet_modules = modify_triplet_modules(train_triplet_modules)
-        val_triplet_modules = modify_triplet_modules(val_triplet_modules)
+    # if args.use_perception_loss:
+    #     print("Using enhanced perception-aligned loss - modifying triplet mining modules...")
+    #     train_triplet_modules = modify_triplet_modules(train_triplet_modules)
+    #     val_triplet_modules = modify_triplet_modules(val_triplet_modules)
 
     # Create the similarity network with enhanced options
     similarity_network = SimilarityNetwork(
