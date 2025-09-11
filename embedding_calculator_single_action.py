@@ -890,7 +890,7 @@ def main():
     #checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                               f"{architecture_variant}_similarity_model_weights_epoch_079.pt")
     checkpoint_path = os.path.join(config.checkpoint_root_dir,
-                                   f"{architecture_variant}_similarity_model_weights_epoch_100.pt")
+                                   f"{architecture_variant}_similarity_model_weights_epoch_101.pt")
     # checkpoint_path = os.path.join(config.checkpoint_root_dir,
     #                                f"{architecture_variant}_best_correlation_epoch_050.pt")
 

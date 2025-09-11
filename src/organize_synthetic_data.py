@@ -581,3 +581,262 @@ def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_di
         balanced_dicts.append(dict_similarity_exemplars)
 
     return balanced_dicts
+
+
+"""
+"""
+"""
+
+Modified functions for organize_synthetic_data.py to work with embeddings
+
+"""
+"""
+"""
+
+
+def load_similarity_data_from_embeddings(bool_drop, anim_name, config, embedding_dir, combination_method='concat',
+                                         train_val_split=1, force_regenerate=False):
+    """
+    Load similarity data from pre-generated embeddings instead of raw motion data.
+
+    Args:
+        bool_drop: Whether to drop neutral exemplar
+        anim_name: Animation name (should be "walking" for your case)
+        config: Configuration object
+        embedding_dir: Directory containing the embedding files
+        combination_method: How to combine root and rotation embeddings
+        train_val_split: Train/validation split ratio
+        force_regenerate: If True, force regeneration even if pickle file exists
+
+    Returns:
+        similarity_dict: Dictionary with train/validation/test splits
+    """
+    from embedding_dataset import EmbeddingDataset  # Import the class we created above
+
+    # Create expected file path for the similarity dictionary
+    file_path = config.similarity_exemplars_dir + anim_name + "_" + config.similarity_dict_file_name
+    embedding_file_path = config.similarity_exemplars_dir + f"{anim_name}_embeddings_{combination_method}_" + config.similarity_dict_file_name
+
+    # Check if embedding-based similarity data already exists
+    if not os.path.isfile(embedding_file_path) or force_regenerate:
+        print(f"Generating fresh similarity data from embeddings for {anim_name}")
+        print(f"Embedding method: {combination_method}")
+
+        # Create embedding dataset
+        embedding_dataset = EmbeddingDataset(embedding_dir)
+
+        # Create similarity dictionary from embeddings
+        dict_similarity_classes_exemplars = embedding_dataset.create_similarity_dict(combination_method)
+
+        # Save the dictionary with a new name to distinguish from raw motion data
+        os.makedirs(os.path.dirname(embedding_file_path), exist_ok=True)
+        with open(embedding_file_path, 'wb') as f:
+            pickle.dump(dict_similarity_classes_exemplars, f)
+        print(f"Saved embedding-based similarity data to {embedding_file_path}")
+    else:
+        # Load existing embedding-based similarity data
+        dict_similarity_classes_exemplars = pickle.load(open(embedding_file_path, "rb"))
+        print(f"Loaded existing embedding-based similarity data from {embedding_file_path}")
+
+    # Print information about the loaded data
+    print(f"\nEMBEDDING-BASED SIMILARITY DATA FOR {anim_name}:")
+    print(f"Number of effort classes: {len(dict_similarity_classes_exemplars)}")
+
+    # Check a few example classes
+    sample_keys = list(dict_similarity_classes_exemplars.keys())[:3]
+    for key in sample_keys:
+        exemplars = dict_similarity_classes_exemplars[key]
+        if exemplars:
+            print(f"  Effort {key}: {len(exemplars)} exemplars, embedding shape: {exemplars[0].shape}")
+
+    # Handle neutral class dropping
+    if bool_drop:
+        config.similarity_per_anim_class_num = len(dict_similarity_classes_exemplars) - 1
+        if (0, 0, 0, 0) in dict_similarity_classes_exemplars:
+            dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+    else:
+        config.similarity_per_anim_class_num = len(dict_similarity_classes_exemplars)
+        # Move neutral to front if it exists
+        if (0, 0, 0, 0) in dict_similarity_classes_exemplars:
+            neutral_value = dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+            dict_similarity_classes_exemplars = {(0, 0, 0, 0): neutral_value, **dict_similarity_classes_exemplars}
+
+    # Get number of exemplars per class
+    if dict_similarity_classes_exemplars:
+        num_exemplars = len(dict_similarity_classes_exemplars[next(iter(dict_similarity_classes_exemplars.keys()))])
+        print(f"{anim_name}: Number of exemplars per class: {num_exemplars}")
+        print(
+            f"{anim_name}: Embedding dimension: {dict_similarity_classes_exemplars[next(iter(dict_similarity_classes_exemplars.keys()))][0].shape}")
+    else:
+        num_exemplars = 0
+
+    # Create train/validation/test splits
+    train_size = int(train_val_split * num_exemplars)
+    val_and_test_size = int(((1 - train_val_split) * num_exemplars))
+
+    train_data = {}
+    validation_data = {}
+    test_data = {}
+
+    for k, v in dict_similarity_classes_exemplars.items():
+        train_data[k] = v[:train_size] if train_size > 0 else v
+        if val_and_test_size == 0:
+            validation_data[k] = v[:train_size] if train_size > 0 else v
+            test_data[k] = v[:train_size] if train_size > 0 else v
+        else:
+            validation_data[k] = v[train_size:train_size + val_and_test_size]
+            test_data[k] = v[train_size:train_size + val_and_test_size]
+
+    return {
+        'train': train_data,
+        'validation': validation_data,
+        'test': test_data
+    }
+
+
+def balance_embedding_similarity_classes(list_similarity_dicts):
+    """
+    Balance embedding similarity classes. Since embeddings have fixed dimensions,
+    we just need to ensure all classes have the same number of exemplars.
+
+    Args:
+        list_similarity_dicts: List of similarity dictionaries
+
+    Returns:
+        Balanced list of dictionaries
+    """
+    balanced_dicts = []
+
+    for dict_similarity_exemplars in list_similarity_dicts:
+        # Find the minimum number of exemplars across all classes
+        min_exemplars = min(len(exemplars) for exemplars in dict_similarity_exemplars.values())
+        print(f"Balancing to {min_exemplars} exemplars per class")
+
+        # Truncate all classes to have the same number of exemplars
+        for key, exemplars in dict_similarity_exemplars.items():
+            dict_similarity_exemplars[key] = exemplars[:min_exemplars]
+
+        balanced_dicts.append(dict_similarity_exemplars)
+
+    return balanced_dicts
+
+
+# Alternative: Create a modified SimilarityDataLoader for embeddings
+class EmbeddingSimilarityDataLoader:
+    """
+    Modified data loader that works directly with embeddings instead of motion data.
+    """
+
+    def __init__(self, list_similarity_dicts, config, shuffle=False, valid_indices=None):
+        """
+        Initialize data loader for embeddings.
+
+        Args:
+            list_similarity_dicts: List of similarity dictionaries containing embeddings
+            config: Configuration object
+            shuffle: Whether to shuffle data
+            valid_indices: Valid indices for train/val splitting
+        """
+        self.config = config
+        self.shuffle = shuffle
+        self.dict_similarity_exemplars = {}
+        self.class_indexes = []
+        self.list_tuples_dict_idx_class_tuple = []
+
+        # Track module sizes and start indices
+        self.module_sizes = []
+        self.module_start_indices = []
+
+        all_classes_count = 0
+        start_idx = 0
+
+        for i, similarity_dict in enumerate(list_similarity_dicts):
+            curr_valid_indices = None if valid_indices is None else valid_indices[i]
+
+            # Count examples for this module
+            module_examples = 0
+            for class_tuple in similarity_dict.keys():
+                if curr_valid_indices is None or class_tuple in curr_valid_indices:
+                    module_examples += 1
+
+            self.module_sizes.append(module_examples)
+            self.module_start_indices.append(start_idx)
+            start_idx += module_examples
+
+            # Add examples to our data structure
+            for class_tuple, embeddings in similarity_dict.items():
+                if curr_valid_indices is not None and class_tuple not in curr_valid_indices:
+                    continue
+
+                new_key = (i, class_tuple)
+                # Take first embedding as the representative (since embeddings are already computed)
+                self.dict_similarity_exemplars[new_key] = embeddings[0] if embeddings else np.zeros(
+                    config.embedding_size)
+                self.list_tuples_dict_idx_class_tuple.append(new_key)
+                self.class_indexes.append(all_classes_count)
+                all_classes_count += 1
+
+        self.num_classes = len(self.class_indexes)
+        self.batch_size = len(self.dict_similarity_exemplars.keys())
+        self._num_batches = 1
+        self.exemplar_idx = 0
+
+        # Set exemplar dimensions based on embedding size
+        if self.dict_similarity_exemplars:
+            first_embedding = next(iter(self.dict_similarity_exemplars.values()))
+            if hasattr(first_embedding, 'shape'):
+                self.exemplar_dim = first_embedding.shape
+            else:
+                self.exemplar_dim = (len(first_embedding),)
+        else:
+            self.exemplar_dim = (config.embedding_size,)
+
+        print(f"EmbeddingSimilarityDataLoader: {self.num_classes} classes, embedding dim: {self.exemplar_dim}")
+
+    def __getitem__(self, index):
+        """Get a batch of embeddings."""
+        if index >= self._num_batches:
+            raise StopIteration
+
+        # Stack all embeddings into a batch
+        batch_embeddings = []
+        for class_tuple in self.list_tuples_dict_idx_class_tuple:
+            embedding = self.dict_similarity_exemplars[class_tuple]
+            if isinstance(embedding, np.ndarray):
+                batch_embeddings.append(torch.from_numpy(embedding).float())
+            else:
+                batch_embeddings.append(embedding.float())
+
+        batch_features = torch.stack(batch_embeddings)
+
+        # Add dummy dimensions to match expected format (if needed)
+        if len(batch_features.shape) == 2:  # [batch_size, embedding_dim]
+            batch_features = batch_features.unsqueeze(-1)  # [batch_size, embedding_dim, 1]
+
+        class_labels = torch.tensor(self.class_indexes, dtype=torch.long)
+
+        return batch_features, class_labels
+
+    def __len__(self):
+        return self._num_batches
+
+    def __iter__(self):
+        self.current_index = 0
+        return self
+
+    def __next__(self):
+        if self.current_index >= self._num_batches:
+            raise StopIteration
+
+        batch = self.__getitem__(self.current_index)
+        self.current_index += 1
+        return batch
+
+    def on_epoch_end(self):
+        """Handle end of epoch."""
+        if self.shuffle:
+            p = np.random.permutation(len(self.class_indexes))
+            self.class_indexes = [self.class_indexes[i] for i in p]
+            self.list_tuples_dict_idx_class_tuple = [self.list_tuples_dict_idx_class_tuple[i] for i in p]
+        self.exemplar_idx = 0
+

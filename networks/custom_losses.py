@@ -139,7 +139,7 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy, class
     elif batch_strategy == BatchStrategy.SEMI_HARD:
         diff_rl_rn = torch.where(diff_rl_rn < 0, diff_rl_rn, torch.zeros_like(diff_rl_rn))
 
-    print(f"diff_rl_rn: {diff_rl_rn}")
+    # print(f"diff_rl_rn: {diff_rl_rn}")
     diff_rl_rn_alpha = diff_rl_rn + triplet_mining.matrix_alpha_left_right_right_left
     # print(f"pre bool diff_rl_alpha: {diff_rl_rn_alpha}")
     diff_rl_alpha = diff_rl_rn_alpha * triplet_mining.matrix_bool_right_left
@@ -153,18 +153,18 @@ def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy, class
     # but with matrix_alpha_left_neut_neut_left which now contains left-right alphas
 
     # L = anchor (from Left-Neutral preference case)
-    print(f"matrix_alpha_left_neut_neut_left: {triplet_mining.matrix_alpha_left_neut_neut_left}")
+    # print(f"matrix_alpha_left_neut_neut_left: {triplet_mining.matrix_alpha_left_neut_neut_left}")
     ln_diff_lr_alpha = diff_lr_ln + triplet_mining.matrix_alpha_left_neut_neut_left
-    print(f"pre bool ln_diff_lr_alpha: {ln_diff_lr_alpha}")
+    # print(f"pre bool ln_diff_lr_alpha: {ln_diff_lr_alpha}")
     ln_diff_lr_alpha = ln_diff_lr_alpha * triplet_mining.matrix_bool_left_neut
-    print(f"post bool ln_diff_lr_alpha: {ln_diff_lr_alpha}")
+    # print(f"post bool ln_diff_lr_alpha: {ln_diff_lr_alpha}")
     triplet_loss_L_R_from_LN = torch.clamp(ln_diff_lr_alpha, min=0.0)
 
     # R = anchor (from Left-Neutral preference case)
     ln_diff_rl_alpha = diff_rl_rn + triplet_mining.matrix_alpha_left_neut_neut_left
-    print(f"pre bool ln_diff_rl_alpha: {ln_diff_rl_alpha}")
+    # print(f"pre bool ln_diff_rl_alpha: {ln_diff_rl_alpha}")
     ln_diff_rl_alpha = ln_diff_rl_alpha * triplet_mining.matrix_bool_neut_left
-    print(f"post bool ln_diff_rl_alpha: {ln_diff_rl_alpha}")
+    # print(f"post bool ln_diff_rl_alpha: {ln_diff_rl_alpha}")
     triplet_loss_R_L_from_LN = torch.clamp(ln_diff_rl_alpha, min=0.0)
 
     # -------------------------------------------------------------------------
@@ -339,7 +339,7 @@ def calculate_integrated_perception_loss(y_true, y_pred, triplet_mining, adaptiv
 
     # Weight the different loss components (can be tuned)
     alignment_weight = 0.2  # Direct alignment with perception
-    correlation_weight = 0.5  # Correlation maximization
+    correlation_weight = 0.2  # Correlation maximization
     rank_weight = 1.0  # Ordinal relationship preservation
     structure_weight = 1  # Embedding structure preservation
     neutral_weight = 0.2  # Neutral contrast term
@@ -562,7 +562,7 @@ def calculate_contrastive_loss(y_true, y_pred, triplet_mining, batch_strategy, c
         # Use tensor_dists_class_neut for left-neutral distances
         # Need to reshape for proper broadcasting
         left_neut_distances = triplet_mining.tensor_dists_class_neut.reshape(-1, 1)
-        print(f"shape of left_neut_distances: {left_neut_distances.shape}")
+        # print(f"shape of left_neut_distances: {left_neut_distances.shape}")
 
         # Scale distances
         scaled_distances = left_neut_distances * scaling_factor
