@@ -771,7 +771,7 @@ class EmbeddingSimilarityDataLoader:
                 new_key = (i, class_tuple)
                 # Take first embedding as the representative (since embeddings are already computed)
                 self.dict_similarity_exemplars[new_key] = embeddings[0] if embeddings else np.zeros(
-                    config.embedding_size)
+                    config.embedding_refinement_model_output_size)
                 self.list_tuples_dict_idx_class_tuple.append(new_key)
                 self.class_indexes.append(all_classes_count)
                 all_classes_count += 1
@@ -789,7 +789,7 @@ class EmbeddingSimilarityDataLoader:
             else:
                 self.exemplar_dim = (len(first_embedding),)
         else:
-            self.exemplar_dim = (config.embedding_size,)
+            self.exemplar_dim = (config.embedding_refinement_model_output_size,)
 
         print(f"EmbeddingSimilarityDataLoader: {self.num_classes} classes, embedding dim: {self.exemplar_dim}")
 

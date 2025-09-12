@@ -21,7 +21,7 @@ class Config:
         # Network dimensions
         # 28 joints with rotations (out of 33) x 3 dimensions for euler angles = 84 + efforts = 88, x 4 dimensions for quaternions = 112 + efforts = 116
         self.similarity_exemplar_dim = (137, 112)
-        self.embedding_size = 32
+        self.embedding_refinement_model_output_size = 512
         self.n_similarity_epochs = 101
         self.similarity_per_anim_class_num = 57
 

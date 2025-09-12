@@ -86,45 +86,6 @@ def create_train_val_split(similarity_dicts, val_ratio=0.4):
 
     return train_indices, val_indices
 
-
-# def create_train_val_split(similarity_dicts, val_ratio=0.4):
-#     """
-#     Create training and validation indices for each animation type.
-#
-#     Args:
-#         similarity_dicts: List of dictionaries containing class exemplars for each animation
-#         val_ratio: Ratio of classes to use for validation
-#
-#     Returns:
-#         train_indices: List of sets containing training class indices for each animation
-#         val_indices: List of sets containing validation class indices for each animation
-#     """
-#
-#     train_indices = []
-#     val_indices = []
-#
-#     for anim_dict in similarity_dicts:
-#         # Get keys except neutral
-#         keys = [k for k in anim_dict.keys() if k != (0, 0, 0, 0)]
-#
-#         # Determine validation set size
-#         val_size = max(1, int(len(keys) * val_ratio))
-#
-#         # Randomly sample keys for validation
-#         val_keys = set(random.sample(keys, val_size))
-#         train_keys = set(k for k in keys if k not in val_keys)
-#
-#         # Add neutral exemplar to both sets
-#         if (0, 0, 0, 0) in anim_dict:
-#             train_keys.add((0, 0, 0, 0))
-#             val_keys.add((0, 0, 0, 0))
-#
-#         train_indices.append(train_keys)
-#         val_indices.append(val_keys)
-#
-#     return train_indices, val_indices
-
-
 def get_inverse_direct_comparison_value(key1, key2, triplet_modules):
     """
     Get the inverse of direct comparison value (1 - value) for a pair of keys.

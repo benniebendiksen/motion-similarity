@@ -177,7 +177,7 @@ def run_embedding_triplet_training(
     print(f"Training classes: {train_loader.num_classes}")
     print(f"Validation classes: {val_loader.num_classes}")
     print(f"Input embedding dim: {train_loader.exemplar_dim}")
-    print(f"Output embedding size: {config.embedding_size}")
+    print(f"Output embedding size: {config.embedding_refinement_model_output_size}")
     print(f"Epochs: {n_epochs}")
     print(f"Perception loss: {use_perception_loss}")
     print(f"Adaptive distance: {use_adaptive_distance}")
@@ -212,7 +212,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run embedding-based triplet training')
 
     # Required arguments
-    parser.add_argument('--embedding-dir', type=str, required=True,
+    parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_encoded',
                         help='Directory containing embedding files (.pt files)')
 
     # Optional arguments

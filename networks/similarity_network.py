@@ -222,7 +222,7 @@ class SimilarityNetwork:
 
         self.architecture_variant = architecture_variant
         self.checkpoint_dir = checkpoint_root_dir
-        self.embedding_size = self.config.embedding_size
+        self.embedding_size = self.config.embedding_refinement_model_output_size
 
         # Add learning rate scheduler type
         self.lr_scheduler_type = lr_scheduler_type
@@ -1235,15 +1235,15 @@ def build_embedding_model(self):
             break
 
     print(f"Input embedding dimension: {input_embedding_dim}")
-    print(f"Output embedding size: {self.embedding_size}")
+    print(f"Output embedding size: {self.embedding_refinement_model_output_size}")
 
     # Create base network for embeddings
-    base_network = EmbeddingSimilarityNetworkV0(input_embedding_dim, self.embedding_size)
+    base_network = EmbeddingSimilarityNetworkV0(input_embedding_dim, self.embedding_refinement_model_output_size)
 
     # Wrap with adaptive distance module if requested
     if self.use_adaptive_distance:
         # self.network = EmbeddingEnhancedSimilarityNetwork(base_network, self.embedding_size)
-        self.network = EmbeddingSimilarityNetworkV0(base_network, self.embedding_size)
+        self.network = EmbeddingSimilarityNetworkV0(base_network, self.embedding_refinement_model_output_size)
         self.adaptive_distance_module = self.network.adaptive_distance
     else:
         self.network = base_network
@@ -1254,7 +1254,7 @@ def build_embedding_model(self):
 
     print(f"Created embedding-based similarity network:")
     print(f"  Input dim: {input_embedding_dim}")
-    print(f"  Output dim: {self.embedding_size}")
+    print(f"  Output dim: {self.embedding_refinement_model_output_size}")
     print(f"  Architecture: {'Enhanced' if self.use_adaptive_distance else 'Standard'}")
 
     # Create loss functions (same as before)
@@ -1362,17 +1362,17 @@ def build_model_safe(self):
 
     # Create base network based on architecture variant
     if self.architecture_variant == 0:
-        base_network = SimilarityNetworkV0(input_shape, self.embedding_size)
+        base_network = SimilarityNetworkV0(input_shape, self.embedding_refinement_model_output_size)
     elif self.architecture_variant == 1:
         # For simplicity, reusing variant 0
-        base_network = SimilarityNetworkV0(input_shape, self.embedding_size)
+        base_network = SimilarityNetworkV0(input_shape, self.embedding_refinement_model_output_size)
     elif self.architecture_variant in [2, 3, 4]:
         # For simplicity, reusing variant 0
-        base_network = SimilarityNetworkV0(input_shape, self.embedding_size)
+        base_network = SimilarityNetworkV0(input_shape, self.embedding_refinement_model_output_size)
 
     # Wrap base network with adaptive distance module if requested
     if self.use_adaptive_distance:
-        self.network = EnhancedSimilarityNetwork(base_network, self.embedding_size)
+        self.network = EnhancedSimilarityNetwork(base_network, self.embedding_refinement_model_output_size)
         self.adaptive_distance_module = self.network.adaptive_distance
     else:
         self.network = base_network
@@ -1416,7 +1416,7 @@ class EmbeddingAwareSimilarityNetwork:
         self.train_loader = train_loader
         self.validation_loader = validation_loader
         self.test_loader = test_loader
-        self.embedding_size = config.embedding_size
+        self.embedding_size = config.embedding_refinement_model_output_size
 
         # Store training and validation triplet modules
         self.train_triplet_modules = triplet_modules

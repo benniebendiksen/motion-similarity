@@ -214,7 +214,7 @@ if __name__ == '__main__':
     print("\n=== Final Training Configuration ===")
     print(f"Architecture variant: {arch_variant}")
     print(f"Input embedding dimension: {train_loader.exemplar_dim}")
-    print(f"Output embedding size: {config.embedding_size}")
+    print(f"Output embedding size: {config.embedding_refinement_model_output_size}")
     print(f"Number of training classes: {train_loader.num_classes}")
     print(f"Batch size: {train_loader.batch_size}")
     print(f"Number of epochs: {config.n_similarity_epochs}")

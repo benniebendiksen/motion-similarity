@@ -140,7 +140,7 @@ class TripletMining:
 
         # Initialize tensor_dists_class_neut with the correct size
         self.tensor_dists_class_neut = torch.zeros(self.num_states_drives, dtype=torch.float32, requires_grad=False)
-        self.neutral_embedding = torch.zeros(self.config.embedding_size, dtype=torch.float32, requires_grad=False)
+        self.neutral_embedding = torch.zeros(self.config.embedding_refinement_model_output_size, dtype=torch.float32, requires_grad=False)
 
         self.subset_global_dict()
         self.pre_process_comparisons_data(anim_name)

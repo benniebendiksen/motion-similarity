@@ -489,7 +489,7 @@ def load_embedding_model(checkpoint_path, architecture_variant, config, data_loa
 
     # Create the network directly with the correct input dimension
     # Bypass the EmbeddingAwareSimilarityNetwork's automatic dimension detection
-    output_dim = 32  # Standard output dimension
+    output_dim = config.embedding_refinement_model_output_size
     network = EmbeddingSimilarityNetworkV0(input_dim, output_dim)
 
     # Move to appropriate device
@@ -985,8 +985,8 @@ def main():
 
     # Set up paths and model parameters for EMBEDDING MODEL
     architecture_variant = 0
-    # Use your best embedding model checkpoint
-    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_022.pt"
+    # Use embedding model checkpoint
+    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_004.pt"
 
     print(f"Using embedding model checkpoint: {checkpoint_path}")
 
@@ -996,8 +996,8 @@ def main():
     squared_class_neut_euc_dist = False
 
     # Animation types to process
-    # animations = ["walking", "pointing", "picking"]
-    animations = ["walking"]
+    animations = ["walking", "pointing", "picking"]
+    # animations = ["walking"]
 
     # Create containers for aggregated results
     all_embeddings = {}
@@ -1060,7 +1060,7 @@ def main():
         print("-" * 50)
 
         # Load embedding-based similarity data instead of raw motion data
-        print("Loading similarity data...")
+        print("Loading pre-trained embeddings data...")
         try:
             # Try to load embedding-based similarity data first
             embedding_similarity_dict = load_similarity_data_from_embeddings(
@@ -1165,15 +1165,10 @@ def main():
 
         # Print final analysis results
         print("\n" + "=" * 70)
-        print(f"FINAL ANALYSIS FOR {anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
+
+        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED AND REFINED EMBEDDINGS VS GEODESIC DTW DISTANCE")
         print("=" * 70 + "\n")
         print(comparison_results['output_text'])
-
-        # Print concise conclusion
-        print("\n" + "=" * 70)
-        print(
-            f"CONCLUSION FOR {anim_name.upper()} ({subset_name}): {comparison_results['summary']['stronger_method']} shows a stronger relationship with human perception")
-        print("=" * 70)
 
         # PART 6: Analyze relationships with human perception embedding method and DTW distance method
         print("\n6. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION (DTW DISTANCE)")
@@ -1199,14 +1194,9 @@ def main():
         )
         # Print final analysis results
         print("\n" + "=" * 70)
-        print(f"FINAL ANALYSIS FOR {anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE DTW DISTANCE")
+        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED AND REFINED EMBEDDINGS VS RAW FEATURE DTW DISTANCE")
         print("=" * 70 + "\n")
         print(comparison_results_dtw['output_text'])
-        # Print concise conclusion
-        print("\n" + "=" * 70)
-        print(
-            f"CONCLUSION FOR {anim_name.upper()} ({subset_name}): {comparison_results_dtw['summary']['stronger_method']} shows a stronger relationship with human perception")
-        print("=" * 70)
 
     # OVERALL ANALYSIS ACROSS ALL ANIMATIONS
     print(f"\n{'=' * 70}")
@@ -1316,6 +1306,339 @@ def main():
     print(f"Animations analyzed: {', '.join(animations)}")
     print(f"{'=' * 70}")
 
+
+def generate_embeddings_without_refinement(similarity_dict, anim_name):
+    """
+    Extract pretrained autoencoder embeddings directly without refinement.
+
+    Args:
+        similarity_dict: Dictionary of similarity data containing pretrained embeddings
+        anim_name: Name of the animation being processed
+
+    Returns:
+        Dictionary mapping (action_type, effort_tuple) to pretrained embedding vectors
+    """
+    print("Extracting pretrained autoencoder embeddings (without refinement)...")
+
+    embeddings = {}
+
+    for class_tuple, exemplars in similarity_dict.items():
+        if not exemplars:
+            continue
+
+        # Get the first exemplar's embedding
+        embedding = exemplars[0]
+
+        # Convert to numpy if needed
+        if hasattr(embedding, 'numpy'):  # TensorFlow tensor
+            embedding = embedding.numpy()
+        elif isinstance(embedding, np.ndarray):  # Already NumPy
+            embedding = embedding
+        elif hasattr(embedding, 'detach'):  # PyTorch tensor
+            embedding = embedding.detach().cpu().numpy()
+        else:
+            try:
+                embedding = np.array(embedding)
+            except:
+                print(f"Warning: Could not convert embedding of type {type(embedding)}")
+                continue
+
+        # Flatten if needed (in case it's 2D with shape (512, 1) or similar)
+        if len(embedding.shape) > 1:
+            embedding = embedding.flatten()
+
+        key = (anim_name, class_tuple)
+        embeddings[key] = embedding
+
+    print(f"Extracted {len(embeddings)} pretrained embeddings")
+
+    # Print sample embedding info
+    if embeddings:
+        sample_key = next(iter(embeddings.keys()))
+        sample_embedding = embeddings[sample_key]
+        print(f"Sample embedding shape: {sample_embedding.shape}")
+        print(f"Embedding dimension: {sample_embedding.shape[0]}")
+
+    return embeddings
+
+
+def main_without_refinement():
+    """
+    Main execution function using pretrained embeddings without refinement.
+    """
+
+    # Initialize configuration
+    config = Config()
+
+    # Set up paths and parameters
+    bool_drop_neutral_exemplar = True
+    bool_fixed_neutral_embedding = True
+    squared_left_right_euc_dist = False
+    squared_class_neut_euc_dist = False
+
+    # Animation types to process
+    animations = ["walking", "pointing", "picking"]
+
+    # Create containers for aggregated results
+    all_embeddings = {}
+    all_raw_features = {}
+    all_triplet_modules = []
+
+    # Flag to control whether to evaluate only validation set
+    evaluate_only_validation = True
+
+    # Process each animation individually
+    for anim_name in animations:
+        print(f"\n{'=' * 70}")
+        print(f"PROCESSING ANIMATION: {anim_name.upper()} (PRETRAINED EMBEDDINGS WITHOUT REFINEMENT)")
+        print(f"{'=' * 70}")
+        print(f"This analysis uses pretrained autoencoder embeddings directly")
+        print(f"without passing them through the embedding refinement network.\n")
+
+        # Get similarity data for train/val split
+        anim_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, anim_name, config)
+        original_anim_similarity_dict = anim_similarity_dict_partition["train"]
+        original_anim_similarity_dict.update(anim_similarity_dict_partition["test"])
+
+        # Create a train/validation split
+        single_anim_dict_list = [original_anim_similarity_dict]
+        balanced_single_anim_dict_list = osd.balance_single_exemplar_similarity_classes_by_frame_count(
+            single_anim_dict_list, 137)
+
+        train_indices, val_indices = create_train_val_split(balanced_single_anim_dict_list)
+
+        # Print split information
+        print(f"Created train/validation split:")
+        print(f"  Training set: {len(train_indices[0])} classes")
+        print(f"  Validation set: {len(val_indices[0])} classes")
+
+        # Determine which subset to evaluate
+        valid_indices = val_indices[0] if evaluate_only_validation else None
+        subset_name = "VALIDATION SUBSET" if evaluate_only_validation else "ALL DATA"
+
+        print(f"\nEvaluating on: {subset_name}")
+        if evaluate_only_validation:
+            print(f"Validation classes: {len(valid_indices)}")
+
+        # PART 1: Create triplet module for this animation
+        print("\n1. CREATING TRIPLET MODULE")
+        print("-" * 50)
+        triplet_module = create_triplet_module(
+            anim_name,
+            bool_drop_neutral_exemplar,
+            bool_fixed_neutral_embedding,
+            squared_left_right_euc_dist,
+            squared_class_neut_euc_dist,
+            config,
+            valid_indices=valid_indices
+        )
+        all_triplet_modules.append(triplet_module)
+
+        # PART 2: Load pretrained embeddings (WITHOUT refinement)
+        print("\n2. LOADING PRETRAINED EMBEDDINGS (NO REFINEMENT)")
+        print("-" * 50)
+
+        try:
+            # Load embedding-based similarity data
+            embedding_similarity_dict = load_similarity_data_from_embeddings(
+                bool_drop=True,
+                anim_name=anim_name,
+                config=config,
+                embedding_dir="../datasets/lma_perform_walking_encoded",
+                combination_method="rots_only",
+                force_regenerate=True
+            )["train"]
+
+            # Filter by valid_indices if evaluating only validation set
+            if evaluate_only_validation:
+                filtered_dict = {k: v for k, v in embedding_similarity_dict.items() if k in valid_indices}
+                print(f"Filtered from {len(embedding_similarity_dict)} to {len(filtered_dict)} classes for validation")
+                working_dict = filtered_dict
+            else:
+                working_dict = embedding_similarity_dict
+
+            # Extract pretrained embeddings directly (skip refinement)
+            embeddings = generate_embeddings_without_refinement(working_dict, anim_name)
+
+        except Exception as e:
+            print(f"Error loading embedding similarity data: {e}")
+            print("Cannot proceed without pretrained embeddings")
+            continue
+
+        print(f"EXTRACTED {len(embeddings)} PRETRAINED EMBEDDINGS (UNREFINED)")
+
+        # PART 3: Extract raw features
+        raw_features = get_raw_features_without_dataloader(anim_name, config, valid_indices=valid_indices)
+        print(f"\n3. EXTRACTED {len(raw_features)} RAW FEATURES")
+        print("-" * 50)
+
+        # Store for overall analysis
+        for key, value in embeddings.items():
+            all_embeddings[key] = value
+
+        for key, value in raw_features.items():
+            all_raw_features[key] = value
+
+        # PART 4: Calculate distances
+        print("\n4. CALCULATING DISTANCES")
+        print("-" * 50)
+
+        # Calculate L2 distances for pretrained embeddings
+        embedding_distances = calculate_pairwise_distances(embeddings)
+
+        # Calculate geodesic distances for raw features
+        geodesic_distances = compute_geodesic_distances(raw_features)
+
+        # PART 5: Analyze relationships with human perception
+        print("\n5. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION")
+        print("-" * 50)
+
+        # Collect distances and corresponding inverse comparison values
+        print("\nCollecting distance and inverse comparison value pairs...")
+        embedding_dist, embedding_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+            embedding_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        geo_dist, geo_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+            geodesic_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        # Count valid pairs
+        valid_embedding_pairs = sum(1 for v in embedding_inverse_comparison_values if v is not None)
+        valid_geo_pairs = sum(1 for v in geo_inverse_comparison_values if v is not None)
+
+        print(f"Found {valid_embedding_pairs} pretrained embedding pairs with human ratings")
+        print(f"Found {valid_geo_pairs} geodesic pairs with human ratings")
+
+        # Compare relationships
+        comparison_results = compare_distance_inverse_comparison_value_relationships(
+            embedding_dist, embedding_inverse_comparison_values,
+            geo_dist, geo_inverse_comparison_values,
+            method="geodesic"
+        )
+
+        # Print results
+        print("\n" + "=" * 70)
+        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED EMBEDDINGS VS RAW FEATURE GEODESIC")
+        print("=" * 70 + "\n")
+        print(comparison_results['output_text'])
+
+        # PART 6: DTW analysis
+        print("\n6. ANALYZING WITH DTW DISTANCE")
+        print("-" * 50)
+
+        raw_features_dtw = get_raw_features_without_dataloader(
+            anim_name, config, valid_indices=valid_indices, balance_class_frame_counts=False
+        )
+
+        dtw_distances = calculate_real_variable_length_dtw(raw_features_dtw)
+
+        dtw_dist, dtw_inverse_comparison_values = collect_distance_inverse_comparison_value_pairs(
+            dtw_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        valid_dtw_pairs = sum(1 for v in dtw_inverse_comparison_values if v is not None)
+        print(f"Found {valid_dtw_pairs} DTW pairs with human ratings")
+
+        comparison_results_dtw = compare_distance_inverse_comparison_value_relationships(
+            embedding_dist, embedding_inverse_comparison_values,
+            dtw_dist, dtw_inverse_comparison_values,
+            method="dtw"
+        )
+
+        print("\n" + "=" * 70)
+        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED EMBEDDINGS VS RAW FEATURE DTW")
+        print("=" * 70 + "\n")
+        print(comparison_results_dtw['output_text'])
+
+    # OVERALL ANALYSIS
+    print(f"\n{'=' * 70}")
+    subset_label = "VALIDATION SUBSET" if evaluate_only_validation else "ALL DATA"
+    print(f"OVERALL ANALYSIS: PRETRAINED EMBEDDINGS VS GEODESIC ({subset_label})")
+    print(f"{'=' * 70}\n")
+
+    # Combine results from all animations
+    combined_emb_dist = []
+    combined_emb_alphas = []
+    combined_geo_dist = []
+    combined_geo_alphas = []
+
+    for anim_name in animations:
+        # Recreate validation split for this animation
+        anim_similarity_dict_partition = osd.load_similarity_data(bool_drop_neutral_exemplar, anim_name, config)
+        original_anim_similarity_dict = anim_similarity_dict_partition["train"]
+        original_anim_similarity_dict.update(anim_similarity_dict_partition["test"])
+
+        single_anim_dict_list = [original_anim_similarity_dict]
+        balanced_single_anim_dict_list = osd.balance_single_exemplar_similarity_classes_by_frame_count(
+            single_anim_dict_list, 137)
+
+        train_indices, val_indices = create_train_val_split(balanced_single_anim_dict_list)
+        valid_indices = val_indices[0] if evaluate_only_validation else None
+
+        # Create triplet module
+        triplet_module = create_triplet_module(
+            anim_name,
+            bool_drop_neutral_exemplar,
+            bool_fixed_neutral_embedding,
+            squared_left_right_euc_dist,
+            squared_class_neut_euc_dist,
+            config,
+            valid_indices=valid_indices
+        )
+
+        # Extract embeddings and raw features for this animation
+        anim_embeddings = {k: v for k, v in all_embeddings.items() if k[0] == anim_name}
+        anim_raw_features = {k: v for k, v in all_raw_features.items() if k[0] == anim_name}
+
+        # Calculate distances
+        anim_embedding_distances = calculate_pairwise_distances(anim_embeddings)
+        anim_geodesic_distances = compute_geodesic_distances(anim_raw_features)
+
+        # Collect pairs
+        anim_emb_dist, anim_emb_alphas = collect_distance_inverse_comparison_value_pairs(
+            anim_embedding_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        anim_geo_dist, anim_geo_alphas = collect_distance_inverse_comparison_value_pairs(
+            anim_geodesic_distances, triplet_module, get_inverse_direct_comparison_value
+        )
+
+        # Add valid pairs
+        for i, alpha in enumerate(anim_emb_alphas):
+            if alpha is not None:
+                combined_emb_dist.append(anim_emb_dist[i])
+                combined_emb_alphas.append(alpha)
+
+        for i, alpha in enumerate(anim_geo_alphas):
+            if alpha is not None:
+                combined_geo_dist.append(anim_geo_dist[i])
+                combined_geo_alphas.append(alpha)
+
+    print(f"Combined {len(combined_emb_alphas)} pretrained embedding pairs with human ratings")
+    print(f"Combined {len(combined_geo_alphas)} geodesic pairs with human ratings")
+
+    # Final comparison
+    comparison_results = compare_distance_inverse_comparison_value_relationships(
+        combined_emb_dist, combined_emb_alphas,
+        combined_geo_dist, combined_geo_alphas,
+        method="geodesic"
+    )
+
+    print("\n" + "=" * 70)
+    print(f"FINAL: PRETRAINED EMBEDDINGS VS RAW GEODESIC ({subset_label})")
+    print("=" * 70 + "\n")
+    print(comparison_results['output_text'])
+
+    print("\n" + "=" * 70)
+    print(f"CONCLUSION: {comparison_results['summary']['stronger_method']}")
+    print("=" * 70)
+
+    print(f"\n{'=' * 70}")
+    print("ANALYSIS COMPLETE (PRETRAINED EMBEDDINGS WITHOUT REFINEMENT)")
+    print(f"Evaluation subset: {subset_label}")
+    print(f"Animations analyzed: {', '.join(animations)}")
+    print(f"{'=' * 70}")
 
 if __name__ == "__main__":
     main()

@@ -190,7 +190,7 @@ def build_model(is_training, images, params):
 
     model.add(layers.Flatten())
 
-    model.add(layers.Dense(params.embedding_size))
+    model.add(layers.Dense(params.embedding_refinement_model_output_size))
 
     return model
 

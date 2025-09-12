@@ -968,18 +968,12 @@ def main():
             method="geodesic"
         )
 
-        # Print results
+        # Print Geodesic distance comparison results
         print("\n" + "=" * 70)
-        print(f"FINAL ANALYSIS FOR {anim_name.upper()} ({subset_name}): "
+        print(f"{anim_name.upper()} ({subset_name}): "
               f"EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
         print("=" * 70 + "\n")
         print(comparison_results['output_text'])
-
-        print("\n" + "=" * 70)
-        print(f"CONCLUSION FOR {anim_name.upper()} ({subset_name}): "
-              f"{comparison_results['summary']['stronger_method']} shows a stronger "
-              f"relationship with human perception")
-        print("=" * 70)
 
         # PART 6: Compare with DTW distances
         print("\n6. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION (DTW DISTANCE)")
@@ -1011,7 +1005,7 @@ def main():
             method="dtw"
         )
 
-        # Print DTW results
+        # Print DTW comparison results
         print("\n" + "=" * 70)
         print(f"{anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE DTW DISTANCE")
         print("=" * 70 + "\n")
