@@ -1439,15 +1439,39 @@ def main_without_refinement():
         print("-" * 50)
 
         try:
-            # Load embedding-based similarity data
-            embedding_similarity_dict = load_similarity_data_from_embeddings(
-                bool_drop=True,
-                anim_name=anim_name,
-                config=config,
-                embedding_dir="../datasets/lma_perform_walking_encoded",
-                combination_method="rots_only",
-                force_regenerate=True
-            )["train"]
+            if anim_name == "picking":
+                # Load embedding-based similarity data
+                embedding_similarity_dict = load_similarity_data_from_embeddings(
+                    bool_drop=True,
+                    anim_name=anim_name,
+                    config=config,
+                    embedding_dir="../datasets/lma_perform_picking_encoded",
+                    combination_method="rots_only",
+                    force_regenerate=True
+                )["train"]
+
+            elif anim_name == "pointing":
+                embedding_similarity_dict = load_similarity_data_from_embeddings(
+                    bool_drop=True,
+                    anim_name=anim_name,
+                    config=config,
+                    embedding_dir="../datasets/lma_perform_pointing_encoded",
+                    combination_method="rots_only",
+                    force_regenerate=True
+                )["train"]
+
+            elif anim_name == "walking":
+                embedding_similarity_dict = load_similarity_data_from_embeddings(
+                    bool_drop=True,
+                    anim_name=anim_name,
+                    config=config,
+                    embedding_dir="../datasets/lma_perform_walking_encoded",
+                    combination_method="rots_only",
+                    force_regenerate=True
+                )["train"]
+
+            else:
+                raise Exception(f"Unknown animation name: {anim_name}")
 
             # Filter by valid_indices if evaluating only validation set
             if evaluate_only_validation:

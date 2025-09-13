@@ -11,7 +11,6 @@ from pathlib import Path
 class EmbeddingDataset:
     def __init__(self, embedding_dir, motion_dir=None):
         """
-
         Dataset for loading pre-generated embeddings.
 
         Args:
@@ -28,38 +27,148 @@ class EmbeddingDataset:
 
         print(f"Found {len(self.root_files)} root embeddings and {len(self.rots_files)} rotation embeddings")
 
-        # Create mapping from base filename to embeddings
+        # Generate valid states and drives
+        valid_effort_tuples = self._generate_valid_effort_tuples()
+
+        # Create mapping from base filename to embeddings, filtered by valid efforts
         self.embedding_pairs = {}
+        self.effort_mapping = {}
+
         for root_file in self.root_files:
             base_name = root_file.name.replace("_root.pt", "")
             rots_file = self.embedding_dir / f"{base_name}_rots.pt"
 
             if rots_file.exists():
-                self.embedding_pairs[base_name] = {
-                    'root_path': root_file,
-                    'rots_path': rots_file
-                }
+                # Extract and validate effort values
+                effort_tuple = self._extract_effort_tuple(base_name)
 
-        print(f"Successfully paired {len(self.embedding_pairs)} embedding pairs")
-
-        # Extract effort values from filenames
-        self.effort_mapping = {}
-        for base_name in self.embedding_pairs.keys():
-            try:
-                # Assuming filename format: "prefix_effort1_effort2_effort3_effort4.bvh"
-                name_parts = base_name.split('_')
-                if len(name_parts) >= 4:
-                    # Take last 4 parts as effort values
-                    efforts = [float(part) for part in name_parts[-4:]]
-                    self.effort_mapping[base_name] = tuple(efforts)
+                # Only keep files with valid effort combinations
+                if effort_tuple in valid_effort_tuples:
+                    self.embedding_pairs[base_name] = {
+                        'root_path': root_file,
+                        'rots_path': rots_file
+                    }
+                    self.effort_mapping[base_name] = effort_tuple
                 else:
-                    print(f"Warning: Could not extract efforts from {base_name}")
-                    self.effort_mapping[base_name] = (0, 0, 0, 0)  # Default neutral
-            except ValueError as e:
-                print(f"Warning: Error parsing efforts from {base_name}: {e}")
-                self.effort_mapping[base_name] = (0, 0, 0, 0)
+                    print(f"Skipping {base_name}: effort tuple {effort_tuple} not in valid states/drives")
 
-        print(f"Extracted effort values for {len(self.effort_mapping)} files")
+        print(f"Successfully paired {len(self.embedding_pairs)} embedding pairs after filtering")
+        print(f"Kept files with {len(set(self.effort_mapping.values()))} unique effort combinations")
+
+    @staticmethod
+    def _generate_valid_effort_tuples():
+        """
+        Generate set of valid effort tuples (states, drives, and neutral).
+
+        States: tuples with exactly 2 zeros (polarized in 2 efforts)
+        Drives: tuples with exactly 1 zero (polarized in 3 efforts)
+        Neutral: tuple with all zeros
+
+        Returns:
+            set of valid effort tuples
+        """
+        valid_tuples = set()
+        effort_vals = [-1, 0, 1]
+
+        # Generate all possible combinations
+        import itertools
+        for combo in itertools.product(effort_vals, repeat=4):
+            zero_count = combo.count(0)
+
+            # Include states (2 zeros), drives (1 zero), and neutral (4 zeros)
+            if zero_count in [1, 2, 4]:
+                valid_tuples.add(combo)
+
+        return valid_tuples
+
+    def _extract_effort_tuple(self, base_name):
+        """
+        Extract effort values from filename.
+
+        Args:
+            base_name: filename without extension (e.g., "Walking_-1_0_1_0")
+
+        Returns:
+            tuple of effort values or (0, 0, 0, 0) if parsing fails
+        """
+        try:
+            # Split by underscore and look for numeric values
+            name_parts = base_name.split('_')
+
+            # Find consecutive numeric parts (could be negative)
+            numeric_parts = []
+            for part in name_parts:
+                try:
+                    # Try to convert to int (handles -1, 0, 1)
+                    val = int(part)
+                    if val in [-1, 0, 1]:
+                        numeric_parts.append(val)
+                except ValueError:
+                    # If we've started collecting numbers and hit non-numeric, stop
+                    if numeric_parts and len(numeric_parts) < 4:
+                        numeric_parts = []
+
+            # We should have exactly 4 effort values
+            if len(numeric_parts) == 4:
+                return tuple(numeric_parts)
+            else:
+                print(f"Warning: Could not extract 4 effort values from {base_name}")
+                return (0, 0, 0, 0)  # Default neutral
+
+        except Exception as e:
+            print(f"Warning: Error parsing efforts from {base_name}: {e}")
+            return (0, 0, 0, 0)
+    # def __init__(self, embedding_dir, motion_dir=None):
+    #     """
+    #
+    #     Dataset for loading pre-generated embeddings.
+    #
+    #     Args:
+    #         embedding_dir: Directory containing the .pt embedding files
+    #         motion_dir: Optional directory containing original motion files (for filename mapping)
+    #     """
+    #     self.embedding_dir = Path(embedding_dir)
+    #     self.motion_dir = Path(motion_dir) if motion_dir else None
+    #
+    #     # Load all embedding files
+    #     self.embedding_files = list(self.embedding_dir.glob("*.pt"))
+    #     self.root_files = [f for f in self.embedding_files if "_root.pt" in f.name]
+    #     self.rots_files = [f for f in self.embedding_files if "_rots.pt" in f.name]
+    #
+    #     print(f"Found {len(self.root_files)} root embeddings and {len(self.rots_files)} rotation embeddings")
+    #
+    #     # Create mapping from base filename to embeddings
+    #     self.embedding_pairs = {}
+    #     for root_file in self.root_files:
+    #         base_name = root_file.name.replace("_root.pt", "")
+    #         rots_file = self.embedding_dir / f"{base_name}_rots.pt"
+    #
+    #         if rots_file.exists():
+    #             self.embedding_pairs[base_name] = {
+    #                 'root_path': root_file,
+    #                 'rots_path': rots_file
+    #             }
+    #
+    #     print(f"Successfully paired {len(self.embedding_pairs)} embedding pairs")
+    #
+    #     # Extract effort values from filenames
+    #     self.effort_mapping = {}
+    #     for base_name in self.embedding_pairs.keys():
+    #         try:
+    #             # Assuming filename format: "prefix_effort1_effort2_effort3_effort4.bvh"
+    #             name_parts = base_name.split('_')
+    #             if len(name_parts) >= 4:
+    #                 # Take last 4 parts as effort values
+    #                 efforts = [float(part) for part in name_parts[-4:]]
+    #                 self.effort_mapping[base_name] = tuple(efforts)
+    #             else:
+    #                 print(f"Warning: Could not extract efforts from {base_name}")
+    #                 self.effort_mapping[base_name] = (0, 0, 0, 0)  # Default neutral
+    #         except ValueError as e:
+    #             print(f"Warning: Error parsing efforts from {base_name}: {e}")
+    #             self.effort_mapping[base_name] = (0, 0, 0, 0)
+    #
+    #     print(f"Extracted effort values for {len(self.effort_mapping)} files")
 
     def load_embedding_pair(self, base_name):
         """Load both root and rotation embeddings for a given base filename."""
