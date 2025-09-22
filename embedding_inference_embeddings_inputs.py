@@ -8,7 +8,7 @@ providing comprehensive analysis of how well each method correlates with human p
 
 The framework includes:
 1. Loading and processing motion data for each animation type
-2. Creating train/validation splits similar to main.py
+2. Creating train/validation splits similar to run_motion_triplet_training.py
 3. Generating embeddings using a trained neural network
 4. Extracting variable-length raw features directly from pickle files
 5. Calculating L2 distances for embeddings and geodesic distances for raw features
@@ -840,7 +840,7 @@ def main():
         original_anim_similarity_dict = anim_similarity_dict_partition["train"]
         original_anim_similarity_dict.update(anim_similarity_dict_partition["test"])
 
-        # Create a train/validation split (same as in main.py)
+        # Create a train/validation split (same as in run_motion_triplet_training.py)
         single_anim_dict_list = [original_anim_similarity_dict]
         balanced_single_anim_dict_list = osd.balance_single_exemplar_similarity_classes_by_frame_count(
             single_anim_dict_list, 137)

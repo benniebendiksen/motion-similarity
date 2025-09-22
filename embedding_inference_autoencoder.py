@@ -9,7 +9,7 @@ providing comprehensive analysis of how well each method correlates with human p
 
 The framework includes:
 1. Loading and processing motion data for each animation type
-2. Creating train/validation splits similar to main.py
+2. Creating train/validation splits similar to run_motion_triplet_training.py
 3. Generating embeddings using a trained embedding-based neural network
 4. Extracting variable-length raw features directly from pickle files
 5. Calculating L2 distances for embeddings and geodesic distances for raw features
@@ -44,7 +44,7 @@ sys.path.append(curr_path)
 sys.path.append(os.path.join(curr_path, 'networks'))
 
 # Import required modules
-from networks.similarity_network import EmbeddingAwareSimilarityNetwork
+from networks.similarity_network import EmbeddingRefiningSimilarityNetwork
 from networks.similarity_data_loader import SimilarityDataLoader
 from networks.triplet_mining import TripletMining
 from bvh_visualizing.datasetLoad import BVHDataset
@@ -973,7 +973,7 @@ def compute_geodesic_distances(dict_raw_features):
     return distances
 
 
-def main():
+def main_with_refinement():
     """
     Main execution function that analyzes each animation type separately using embedding-based networks
     and then performs an overall analysis across all animations.
@@ -986,9 +986,9 @@ def main():
     # Set up paths and model parameters for EMBEDDING MODEL
     architecture_variant = 0
     # Use embedding model checkpoint
-    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_004.pt"
+    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_003.pt"
 
-    print(f"Using embedding model checkpoint: {checkpoint_path}")
+    print(f"Using model checkpoint: {checkpoint_path}")
 
     bool_drop_neutral_exemplar = True
     bool_fixed_neutral_embedding = True
@@ -1020,7 +1020,7 @@ def main():
         original_anim_similarity_dict = anim_similarity_dict_partition["train"]
         original_anim_similarity_dict.update(anim_similarity_dict_partition["test"])
 
-        # Create a train/validation split (same as in main.py)
+        # Create a train/validation split (same as in run_motion_triplet_training.py)
         single_anim_dict_list = [original_anim_similarity_dict]
         balanced_single_anim_dict_list = osd.balance_single_exemplar_similarity_classes_by_frame_count(
             single_anim_dict_list, 137)
@@ -1665,4 +1665,4 @@ def main_without_refinement():
     print(f"{'=' * 70}")
 
 if __name__ == "__main__":
-    main()
+    main_without_refinement()

@@ -416,7 +416,7 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
     Load similarity dict of all class exemplars and split across train, validation, and test sets.
 
     Args:
-        train_val_split: float:keep at 1.0; vestigial param given that splitting occurs after returning to main.py
+        train_val_split: float:keep at 1.0; vestigial param given that splitting occurs after returning to run_motion_triplet_training.py
 
     Returns:
         similarity_dict: dict: partitioned similarity dict of all class exemplars

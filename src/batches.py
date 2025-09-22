@@ -369,7 +369,6 @@ class Batches:
         {(0, 0, 0, 0): [tensor([100, 91]), tensor([100, 91]), ... ], (0, 0, 0, 1): ...} for 57 keys, each with
         a list of 37 exemplars of size (100, 91). This makes each class span the length of about two minutes and the
         dictionary size of 2 GB.
-
         """
 
         def generate_states_and_drives():

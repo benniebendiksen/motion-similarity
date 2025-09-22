@@ -371,6 +371,8 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
     """
 
     def batch_triplet_loss(y_true, y_pred):
+        # add debug print statements
+        print(f"y_true shape: {y_true.shape}, y_pred shape: {y_pred.shape}")
         # Calculate overall triplet loss across all modules
         overall_triplet_loss = torch.tensor(0.0, device=y_pred.device)
         valid_modules = 0
@@ -385,6 +387,8 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
                 start_idx = i * triplet_mining.batch_size
                 end_idx = (i + 1) * triplet_mining.batch_size
 
+            print(f"Module {i}: start_idx={start_idx}, end_idx={end_idx}, triplet_mining.batch_size={triplet_mining.batch_size}")
+
             # Ensure indices are within bounds
             end_idx = min(end_idx, y_true.shape[0])
 
@@ -398,13 +402,13 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
 
             # Calculate triplet losses for this module
             try:
-                classes_distances = triplet_mining.calculate_distances(y_pred)
+                classes_distances = triplet_mining.calculate_distances(y_pred_module)
                 triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining, BATCH_STRATEGY, classes_distances)
                 triplet_loss = torch.sum(triplet_losses)
                 overall_triplet_loss += triplet_loss
                 valid_modules += 1
             except Exception as e:
-                print(f"Error in triplet loss calculation for module {i}: {e}")
+                print(f"1: Error in triplet loss calculation for module {i}: {e}")
                 continue
 
         # Normalize by number of valid modules

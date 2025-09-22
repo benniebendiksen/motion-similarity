@@ -27,7 +27,7 @@ sys.path.append(curr_path)
 from embedding_dataset import EmbeddingDataset, create_embedding_similarity_data
 from src.organize_synthetic_data import load_similarity_data_from_embeddings, EmbeddingSimilarityDataLoader
 from networks.similarity_network import make_embedding_aware
-from networks.similarity_network import EmbeddingAwareSimilarityNetwork
+from networks.similarity_network import EmbeddingRefiningSimilarityNetwork
 from networks.triplet_mining import TripletMining
 from Config import Config
 
@@ -94,7 +94,7 @@ def setup_embedding_training(embedding_dir, config, combination_method='concat')
         list_similarity_dicts, config, shuffle=True, valid_indices=train_indices
     )
     val_loader = EmbeddingSimilarityDataLoader(
-        list_similarity_dicts, config, shuffle=False, valid_indices=val_indices
+        list_similarity_dicts, config, shuffle=True, valid_indices=val_indices
     )
 
     print(f"Created data loaders:")
@@ -152,9 +152,9 @@ def run_embedding_triplet_training(
     )
 
     # Create embedding-aware similarity network
-    print("Creating embedding-aware similarity network...")
+    print("Creating embedding-refining similarity network...")
 
-    similarity_network = EmbeddingAwareSimilarityNetwork(
+    similarity_network = EmbeddingRefiningSimilarityNetwork(
         train_loader=train_loader,
         validation_loader=val_loader,
         test_loader=val_loader,
@@ -226,7 +226,7 @@ def main():
     parser.add_argument('--scheduler', type=str, default='plateau',
                         choices=['plateau', 'cosine', 'step'],
                         help='Learning rate scheduler')
-    parser.add_argument('--epochs', type=int, default=300,
+    parser.add_argument('--epochs', type=int, default=500,
                         help='Number of training epochs')
     parser.add_argument('--test-loading', action='store_true',
                         help='Only test loading embeddings without training')

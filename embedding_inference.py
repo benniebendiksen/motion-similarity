@@ -509,7 +509,7 @@ def load_model(checkpoint_path, architecture_variant, config, data_loader, tripl
     try:
         checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
         similarity_network.network.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Successfully loaded model weights")
+        print(f"SUCCESS: Loaded triplet model weights from {checkpoint_path}")
     except Exception as e:
         print(f"Error loading state dict: {e}")
         # Handle various checkpoint format issues
@@ -807,8 +807,9 @@ def main():
     architecture_variant = 0
     checkpoint_path = os.path.join(
         config.checkpoint_root_dir,
-        f"{architecture_variant}_similarity_model_weights_epoch_100_raw_motion_input.pt"
+        f"{architecture_variant}_similarity_model_weights_epoch_125.pt"
     )
+    print(f"Using model checkpoint: {checkpoint_path}")
     # Alternative: Use perception-aligned model
     # checkpoint_path = os.path.join(
     #     config.checkpoint_root_dir,
@@ -816,8 +817,8 @@ def main():
     # )
 
     # Training configuration
-    bool_drop_neutral_exemplar = True  # Exclude neutral poses
-    bool_fixed_neutral_embedding = True  # Fix neutral embedding during training
+    bool_drop_neutral_exemplar = False  # Exclude neutral poses
+    bool_fixed_neutral_embedding = False  # Fix neutral embedding during training
     squared_left_right_euc_dist = False  # Don't square distances
     squared_class_neut_euc_dist = False  # Don't square neutral distances
 

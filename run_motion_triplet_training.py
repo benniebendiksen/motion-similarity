@@ -242,7 +242,7 @@ if __name__ == '__main__':
     parser.add_argument('--use-adaptive-distance', action='store_true', help='Use adaptive distance module')
     parser.add_argument('--scheduler', type=str, default='plateau', choices=['plateau', 'cosine', 'step'],
                         help='Learning rate scheduler type')
-    parser.add_argument('--animation', type=str, default='all', choices=['all', 'walking', 'pointing', 'picking'],
+    parser.add_argument('--animation', type=str, default='all', choices=['all', 'walking', 'pointing', 'walking_pointing', 'picking'],
                         help='Which animation type to train on (all or specific)')
     parser.add_argument('--task-index', type=str, help='Task index for distributed training')
 
@@ -276,6 +276,10 @@ if __name__ == '__main__':
         pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
         list_similarity_dicts = [pointing_similarity_dict]
         animation_names = ['pointing']
+    elif args.animation == 'walking_pointing':
+        pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
+        list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict]
+        animation_names = ['walking', 'pointing']
     elif args.animation == 'picking':
         picking_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "picking", config)["train"]
         list_similarity_dicts = [picking_similarity_dict]
@@ -287,6 +291,7 @@ if __name__ == '__main__':
         animation_names = ['walking', 'pointing', 'picking']
 
     # Balance frame counts
+    #TODO: Redefine method to dynamically set target frame count based on dataset
     list_similarity_dicts = osd.balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts, 137)
 
     # Create train/val split

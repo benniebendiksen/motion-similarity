@@ -1,5 +1,5 @@
 """
-Modified main.py to use pre-generated embeddings instead of raw motion data
+Modified run_motion_triplet_training.py to use pre-generated embeddings instead of raw motion data
 """
 
 import os

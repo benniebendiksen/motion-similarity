@@ -454,7 +454,7 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
                 overall_triplet_loss += triplet_loss
                 valid_modules += 1
             except Exception as e:
-                print(f"Error in triplet loss calculation for module {i}: {e}")
+                print(f"2: Error in triplet loss calculation for module {i}: {e}")
                 continue
 
         # Normalize by number of valid modules

@@ -686,7 +686,8 @@ class SimilarityNetwork:
         Enhanced with correlation tracking and more detailed logging.
         """
 
-        best_loss = float('inf')
+        best_val_loss = float('inf')
+        best_train_loss = float('inf')
         best_correlation = -1.0
         validation_frequency = 1  # Validate every N epochs
 
@@ -732,11 +733,11 @@ class SimilarityNetwork:
                 batch_count += 1
 
             # Calculate average loss for this epoch
-            epoch_loss = running_loss / batch_count if batch_count > 0 else 0
-            self.history['train_loss'].append(epoch_loss)
+            train_epoch_loss = running_loss / batch_count if batch_count > 0 else 0
+            self.history['train_loss'].append(train_epoch_loss)
             self.history['learning_rate'].append(self.optimizer.param_groups[0]['lr'])
 
-            print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}")
+            print(f"Epoch {epoch + 1}: Training Loss = {train_epoch_loss:.4f}")
 
             # Validation phase (run periodically to save time)
             run_validation = (epoch + 1) % validation_frequency == 0 or epoch == 0 or epoch == self.config.n_similarity_epochs - 1
@@ -792,7 +793,7 @@ class SimilarityNetwork:
                             # Negative correlation because scheduler uses min mode (higher correlation is better)
                             self.scheduler.step(-val_correlation)
                         else:
-                            self.scheduler.step(val_epoch_loss)
+                            self.scheduler.step(train_epoch_loss)
                     else:
                         self.scheduler.step()
 
@@ -801,8 +802,9 @@ class SimilarityNetwork:
                 print(f"Current Learning Rate: {current_lr:.8f}")
 
                 # Save checkpoint if this is the best model by loss
-                if val_epoch_loss < best_loss:
-                    best_loss = val_epoch_loss
+                if val_epoch_loss < best_val_loss or train_epoch_loss < best_train_loss:
+                    best_val_loss = val_epoch_loss
+                    best_train_loss = train_epoch_loss
                     self.save_checkpoint(epoch + 1, val_correlation, val_r2)
                     print(f"New best model by loss! Val Loss: {val_epoch_loss:.4f}")
 
@@ -827,7 +829,7 @@ class SimilarityNetwork:
                     print(f"New best model by correlation! Correlation: {val_correlation:.4f}, R²: {val_r2:.4f}")
 
                 # Print summary
-                print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
+                print(f"Epoch {epoch + 1}: Training Loss = {train_epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
                 if self.use_perception_loss:
                     print(f"Correlation: {val_correlation:.4f}, R²: {val_r2:.4f}")
 
@@ -1385,7 +1387,7 @@ def build_model_safe(self):
     # (rest of the original build_model method)
 
 
-class EmbeddingAwareSimilarityNetwork:
+class EmbeddingRefiningSimilarityNetwork:
     """
     Simplified embedding-aware similarity network without adaptive distance or perception loss.
     Uses only the base custom triplet loss, matching the original CNN network's training approach.
@@ -1516,7 +1518,8 @@ class EmbeddingAwareSimilarityNetwork:
 
     def run_model_training(self):
         """Run the simplified training loop - matches original CNN training."""
-        best_loss = float('inf')
+        best_val_loss = float('inf')
+        best_train_loss = float('inf')
         validation_frequency = 1  # Validate every epoch like original
 
         print(f"Starting training for {self.config.n_similarity_epochs} epochs...")
@@ -1593,8 +1596,9 @@ class EmbeddingAwareSimilarityNetwork:
                 print(f"Current Learning Rate: {current_lr:.8f}")
 
                 # Save checkpoint if this is the best model by loss
-                if val_epoch_loss < best_loss:
-                    best_loss = val_epoch_loss
+                if val_epoch_loss < best_val_loss or epoch_loss < best_train_loss:
+                    best_val_loss = val_epoch_loss
+                    best_train_loss = epoch_loss
                     self.save_checkpoint(epoch + 1)
                     print(f"New best model! Val Loss: {val_epoch_loss:.4f}")
 
