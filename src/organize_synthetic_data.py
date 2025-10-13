@@ -410,13 +410,13 @@ def prep_all_data_for_training(config_instance, batches_instance, rotations=True
         traceback.print_exc()
         sys.exit()
 
-
-def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
+def load_similarity_data(bool_drop_neutral_exemplar, anim_name, config, train_val_split=1, exclude_neutral_completely=False):
     """
     Load similarity dict of all class exemplars and split across train, validation, and test sets.
 
     Args:
         train_val_split: float:keep at 1.0; vestigial param given that splitting occurs after returning to run_motion_triplet_training.py
+        exclude_neutral_completely: If True, remove neutral from dict entirely
 
     Returns:
         similarity_dict: dict: partitioned similarity dict of all class exemplars
@@ -424,6 +424,7 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
 
     file_path = config.similarity_exemplars_dir + anim_name + "_" + config.similarity_dict_file_name
     singleton_batches = Batches(config)
+
     if not os.path.isfile(file_path):
         print(f"osd::load_similarity_data(): Generating similarity data for {anim_name} with path: {file_path}")
         prep_all_data_for_training(config_instance=config, batches_instance=singleton_batches, rotations=True,
@@ -432,6 +433,23 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
 
     # Load the dictionary
     dict_similarity_classes_exemplars = pickle.load(open(file_path, "rb"))
+
+    # Handle neutral exclusion
+    if exclude_neutral_completely and (0, 0, 0, 0) in dict_similarity_classes_exemplars:
+        # Completely remove neutral from the dictionary
+        del dict_similarity_classes_exemplars[(0, 0, 0, 0)]
+        config.similarity_per_anim_class_num = len(dict_similarity_classes_exemplars)
+        print(f"{anim_name}: Completely excluded neutral. Classes: {config.similarity_per_anim_class_num}")
+    elif bool_drop_neutral_exemplar:
+        config.similarity_per_anim_class_num = len(dict_similarity_classes_exemplars) - 1
+        if (0, 0, 0, 0) in dict_similarity_classes_exemplars:
+            dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+    else:
+        config.similarity_per_anim_class_num = len(dict_similarity_classes_exemplars)
+        # Move neutral to front if it exists
+        if (0, 0, 0, 0) in dict_similarity_classes_exemplars:
+            neutral_value = dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+            dict_similarity_classes_exemplars = {(0, 0, 0, 0): neutral_value, **dict_similarity_classes_exemplars}
 
     # Print information about the loaded dictionary structure
     # print(f"\nDICTIONARY STRUCTURE EXPLORATION FOR {anim_name}:")
@@ -493,9 +511,9 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
     #TODO: verif that we are indeed storing numpy arrays as the payload. And, given how motion units as opposed to snippets, eliminate the list use
     print(f"loaded dict_similarity_classes_exemplars for anim {anim_name}")
 
-    if bool_drop:
+    if bool_drop_neutral_exemplar:
         config.similarity_per_anim_class_num = 56
-        dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+        # dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
     else:
         config.similarity_per_anim_class_num = 57
         # ensure element of key (0, 0, 0, 0) is at the front of the dict
@@ -533,6 +551,129 @@ def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
         'validation': validation_data,
         'test': test_data
     }
+
+# def load_similarity_data(bool_drop, anim_name, config, train_val_split=1):
+#     """
+#     Load similarity dict of all class exemplars and split across train, validation, and test sets.
+#
+#     Args:
+#         train_val_split: float:keep at 1.0; vestigial param given that splitting occurs after returning to run_motion_triplet_training.py
+#
+#     Returns:
+#         similarity_dict: dict: partitioned similarity dict of all class exemplars
+#     """
+#
+#     file_path = config.similarity_exemplars_dir + anim_name + "_" + config.similarity_dict_file_name
+#     singleton_batches = Batches(config)
+#     if not os.path.isfile(file_path):
+#         print(f"osd::load_similarity_data(): Generating similarity data for {anim_name} with path: {file_path}")
+#         prep_all_data_for_training(config_instance=config, batches_instance=singleton_batches, rotations=True,
+#                                    velocities=False, similarity_pre_processing_only=True,
+#                                    anim_name=anim_name)
+#
+#     # Load the dictionary
+#     dict_similarity_classes_exemplars = pickle.load(open(file_path, "rb"))
+#
+#     # Print information about the loaded dictionary structure
+#     # print(f"\nDICTIONARY STRUCTURE EXPLORATION FOR {anim_name}:")
+#     # print(f"Number of keys in dictionary: {len(dict_similarity_classes_exemplars)}")
+#
+#     # Check 2-3 example keys and their values
+#     sample_keys = list(dict_similarity_classes_exemplars.keys())[:3]  # Take first 3 keys for example
+#     # print(f"Sample keys: {sample_keys}")
+#
+#     # Explore the nested structure for each sample key
+#     for idx, key in enumerate(sample_keys):
+#         exemplars = dict_similarity_classes_exemplars[key]
+#         # print(f"\nKey {idx + 1}: {key}")
+#         # print(f"  Number of exemplars: {len(exemplars)}")
+#
+#         if len(exemplars) > 0:
+#             # Check the type and shape of exemplars
+#             exemplar = exemplars[0]
+#             # print(f"  First exemplar type: {type(exemplar)}")
+#
+#             if isinstance(exemplar, (torch.Tensor, np.ndarray, tf.Tensor)):
+#                 if isinstance(exemplar, torch.Tensor):
+#                     shape = exemplar.shape
+#                     dtype = exemplar.dtype
+#                 elif isinstance(exemplar, np.ndarray):
+#                     shape = exemplar.shape
+#                     dtype = exemplar.dtype
+#                 elif isinstance(exemplar, tf.Tensor):
+#                     shape = exemplar.shape
+#                     dtype = exemplar.dtype
+#                 # print(f"  First exemplar shape: {shape}")
+#                 # print(f"  First exemplar dtype: {dtype}")
+#             else:
+#                 print(f"  First exemplar is not a tensor or array, it's: {type(exemplar)}")
+#
+#     # Check if all exemplars have the same length (first dimension)
+#     lengths = []
+#     for key in dict_similarity_classes_exemplars:
+#         if dict_similarity_classes_exemplars[key]:  # If there are exemplars
+#             exemplar = dict_similarity_classes_exemplars[key][0]
+#             if hasattr(exemplar, 'shape'):
+#                 lengths.append((key, exemplar.shape[0]))
+#
+#     # print("\nSequence lengths:")
+#     # # Print first 5 lengths for brevity
+#     # for key, length in lengths[:5]:
+#     #     print(f"  Key {key}: Length {length}")
+#
+#     # Check if all lengths are the same
+#     unique_lengths = set(length for _, length in lengths)
+#     print(f"Number of unique lengths: {len(unique_lengths)}")
+#     if len(unique_lengths) <= 3:  # If there are only a few unique lengths, print them all
+#         print(f"Unique lengths: {unique_lengths}")
+#     else:
+#         print(f"Range of lengths: {min(unique_lengths)} to {max(unique_lengths)}")
+#
+#     # Keys (sample): [(0, 0, 0, 0), (0, -1, -1, -1), (-1, 0, -1, -1), (0, 0, -1, -1), (1, 0, -1, -1)]
+#     # where each value is a list of a single numpy array (e.g, shape: (137, 88)) and all such tensors have been made uniform in their frame count
+#     #TODO: verif that we are indeed storing numpy arrays as the payload. And, given how motion units as opposed to snippets, eliminate the list use
+#     print(f"loaded dict_similarity_classes_exemplars for anim {anim_name}")
+#
+#     if bool_drop:
+#         config.similarity_per_anim_class_num = 56
+#         dict_similarity_classes_exemplars.pop((0, 0, 0, 0))
+#     else:
+#         config.similarity_per_anim_class_num = 57
+#         # ensure element of key (0, 0, 0, 0) is at the front of the dict
+#         print(f"Anim: {anim_name}, moving dict entry for key (0,0,0,0) to front of dict")
+#         dict_similarity_classes_exemplars = singleton_batches.move_tuple_to_dict_similarity_front(key=(0, 0, 0, 0), dict=dict_similarity_classes_exemplars)
+#     # singleton_batches.dict_similarity_exemplars = dict_similarity_classes_exemplars
+#     # next(iter(dict_similarity_classes_exemplars.keys())) gets the first key in the dictionary
+#     # the length of the lone entry of the value (itself a list) somehow specifies the number of exemplars
+#     num_exemplars = len(dict_similarity_classes_exemplars[next(iter(dict_similarity_classes_exemplars.keys()))])
+#     print(f"{anim_name}: Number of total classes: {len(dict_similarity_classes_exemplars)}")
+#     print(f"{anim_name}: Number of total exemplars per class: {num_exemplars}")
+#     # print(f"{anim_name}: Frame count for first exemplar: {len(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0])}")
+#     # print(f"{anim_name}: Shape for first exemplar: {(dict_similarity_classes_exemplars[(0, 0, 0, 0)][0].shape)}")
+#     p = np.random.permutation(num_exemplars - 1)
+#     train_size = int(train_val_split * num_exemplars)
+#     # temp change to inc val set size
+#     # val_and_test_size = int(((1 - train_val_split) * num_exemplars) / 2)
+#     val_and_test_size = int(((1 - train_val_split) * num_exemplars))
+#     print(f"train size: {train_size}, val and test size: {val_and_test_size}")
+#
+#     train_data = {}
+#     validation_data = {}
+#     test_data = {}
+#     for k, v in dict_similarity_classes_exemplars.items():
+#         train_data[k] = v[:train_size]
+#         if val_and_test_size == 0:
+#             validation_data[k] = v[:train_size]
+#             test_data[k] = v[:train_size]
+#         else:
+#             validation_data[k] = v[train_size:train_size + val_and_test_size]
+#             test_data[k] = v[train_size:train_size + val_and_test_size]
+#
+#     return {
+#         'train': train_data,
+#         'validation': validation_data,
+#         'test': test_data
+#     }
 
 
 def balance_single_exemplar_similarity_classes_by_frame_count(list_similarity_dicts, max_frame_count):
@@ -611,7 +752,7 @@ def load_similarity_data_from_embeddings(bool_drop, anim_name, config, embedding
     Returns:
         similarity_dict: Dictionary with train/validation/test splits
     """
-    from embedding_dataset import EmbeddingDataset  # Import the class we created above
+    from embedding_dataset import EmbeddingDataset  # Import the class created above
 
     # Create expected file path for the similarity dictionary
     file_path = config.similarity_exemplars_dir + anim_name + "_" + config.similarity_dict_file_name
@@ -749,7 +890,6 @@ class EmbeddingSimilarityDataLoader:
 
         all_classes_count = 0
         start_idx = 0
-
         for i, similarity_dict in enumerate(list_similarity_dicts):
             curr_valid_indices = None if valid_indices is None else valid_indices[i]
 
@@ -765,6 +905,12 @@ class EmbeddingSimilarityDataLoader:
 
             # Add examples to our data structure
             for class_tuple, embeddings in similarity_dict.items():
+                # Skip neutral for pointing if it somehow exists (defensive programming)
+                # if i == 1 and class_tuple == (0, 0, 0, 0):  # Index 1 is pointing
+                #     print(
+                #         "Skipping neutral from the construction of dict_similarity_exemplars and list_tuples_dict_idx_class_tuple")
+                #     continue
+
                 if curr_valid_indices is not None and class_tuple not in curr_valid_indices:
                     continue
 

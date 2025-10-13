@@ -83,7 +83,131 @@ class AdaptiveDistanceModule(nn.Module):
 
 
 def calculate_triplet_loss(y_true, y_pred, triplet_mining, batch_strategy, classes_distances):
+    """Modified to handle animations without neutral embeddings"""
+
+    # Check if this module uses neutral distances
+    if not hasattr(triplet_mining, 'use_neutral_distances'):
+        triplet_mining.use_neutral_distances = True
+
+    if triplet_mining.use_neutral_distances:
+        # Original behavior for walking
+        return calculate_triplet_loss_with_neutral(y_true, y_pred, triplet_mining,
+                                                   batch_strategy, classes_distances)
+    else:
+        # New behavior for pointing without neutral
+        return calculate_triplet_loss_without_neutral_v2(y_true, y_pred, triplet_mining,
+                                                      batch_strategy, classes_distances)
+
+
+def calculate_triplet_loss_without_neutral(y_true, y_pred, triplet_mining, batch_strategy, classes_distances):
+    """
+    Contrastive loss for pointing where neutral doesn't exist.
+    Uses direct comparison values to supervise pairwise distances.
+    """
+
+    # For pointing, use the comparison values directly as similarity targets
+    # count_normalized tells us how often users preferred this pair
+    # Higher count_normalized = higher similarity = smaller distance desired
+
+    losses = torch.zeros_like(classes_distances)
+
+    # Check if we have comparison values populated
+    if not hasattr(triplet_mining, 'matrix_comparison_values_left_right'):
+        # Fallback to simple pairwise distance regularization
+        return torch.mean(classes_distances)
+
+    # Use direct comparison values as similarity supervision
+    valid_comparisons = triplet_mining.matrix_comparison_bool_left_right > 0
+
+    if torch.any(valid_comparisons):
+        # Target similarities: inverse of count_normalized
+        # If users preferred this pair often (high count_normalized),
+        # we want small distance (high similarity)
+        target_similarities = 1.0 - triplet_mining.matrix_comparison_values_left_right
+
+        # Normalize distances to [0,1] range for comparison with targets
+        min_dist = torch.min(classes_distances[valid_comparisons])
+        max_dist = torch.max(classes_distances[valid_comparisons])
+
+        if max_dist > min_dist:
+            normalized_distances = (classes_distances - min_dist) / (max_dist - min_dist)
+        else:
+            normalized_distances = classes_distances
+
+        # Contrastive loss: penalize deviation from target similarity
+        for i in range(classes_distances.shape[0]):
+            for j in range(i + 1, classes_distances.shape[1]):  # Upper triangle only
+                if valid_comparisons[i, j]:
+                    # Get the comparison value for this pair
+                    target_dist = target_similarities[i, j]
+                    actual_dist = normalized_distances[i, j]
+
+                    # Squared difference loss
+                    loss = (actual_dist - target_dist) ** 2
+
+                    # Weight by confidence (how many users voted)
+                    # If you have access to raw counts, use them for weighting
+                    # For now, we can use the comparison value as a proxy for confidence
+                    confidence = triplet_mining.matrix_comparison_values_left_right[i, j]
+
+                    losses[i, j] = loss * confidence
+                    losses[j, i] = losses[i, j]  # Symmetric
+
+    # Add regularization to prevent collapse
+    # Ensure some minimum variance in distances
+    distance_variance = torch.var(classes_distances)
+    min_variance = 0.1
+    variance_penalty = torch.relu(min_variance - distance_variance)
+
+    total_loss = torch.mean(losses) + 0.1 * variance_penalty
+
+    return total_loss
+
+
+def calculate_triplet_loss_without_neutral_v2(y_true, y_pred, triplet_mining, batch_strategy, classes_distances):
+    """
+    Margin-based contrastive loss using alpha values as relative preferences.
+    """
+
+    losses = []
+
+    # Process each pair with comparison data
+    for i in range(classes_distances.shape[0]):
+        for j in range(i + 1, classes_distances.shape[1]):
+            if triplet_mining.matrix_bool_left_right[i, j] > 0:
+                alpha_ij = triplet_mining.matrix_alpha_left_right_right_left[i, j]
+
+                # Alpha represents relative preference strength
+                # Positive alpha: i and j should be far apart
+                # Negative alpha: i and j should be close
+
+                distance_ij = classes_distances[i, j]
+
+                if alpha_ij > 0:
+                    # They should be dissimilar - penalize if too close
+                    margin = alpha_ij  # Use alpha as minimum distance
+                    loss = torch.relu(margin - distance_ij)
+                elif alpha_ij < 0:
+                    # They should be similar - penalize if too far
+                    margin = -alpha_ij  # Use negative alpha as maximum distance
+                    loss = torch.relu(distance_ij - margin)
+                else:
+                    # No preference - skip
+                    continue
+
+                losses.append(loss)
+
+    if losses:
+        return torch.mean(torch.stack(losses))
+    else:
+        # No valid comparisons - just regularize
+        return torch.mean(classes_distances) * 0.01
+
+
+def calculate_triplet_loss_with_neutral(y_true, y_pred, triplet_mining, batch_strategy, classes_distances):
     """Calculate triplet loss using left-right embeddings across all preference cases.
+
+    Original triplet loss calculation for walking (with neutral)
 
     Modified to focus on learning embeddings between left and right classes, regardless of
     which pair was most preferable in the original human comparisons.

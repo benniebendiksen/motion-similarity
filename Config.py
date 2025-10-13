@@ -22,7 +22,8 @@ class Config:
         # 28 joints with rotations (out of 33) x 3 dimensions for euler angles = 84 + efforts = 88, x 4 dimensions for quaternions = 112 + efforts = 116
         self.similarity_exemplar_dim = (137, 112)
         self.embedding_refinement_model_output_size = 512
-        self.n_similarity_epochs = 201
+        # self.n_similarity_epochs = 201
+        self.n_similarity_epochs = 50
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'

@@ -807,7 +807,7 @@ def main():
     architecture_variant = 0
     checkpoint_path = os.path.join(
         config.checkpoint_root_dir,
-        f"{architecture_variant}_similarity_model_weights_epoch_125.pt"
+        f"{architecture_variant}_similarity_model_weights_epoch_035.pt"
     )
     print(f"Using model checkpoint: {checkpoint_path}")
     # Alternative: Use perception-aligned model

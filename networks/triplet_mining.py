@@ -12,7 +12,7 @@ import pickle
 
 
 class TripletMining:
-    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None):
+    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None, exclude_neutral_completely=False):
         self.config = config
         self.anim_name = anim_name
         self.dict_similarity_classes_exemplars = {}
@@ -37,6 +37,8 @@ class TripletMining:
         self.tensor_dists_left_right_right_left = None
         self.tensor_dists_class_neut = None
         self.neutral_embedding = None
+        self.exclude_neutral_completely = exclude_neutral_completely
+        self.anim_name = anim_name
 
         self.bool_drop_neutral_exemplar = bool_drop
         self.bool_fixed_neutral_embedding = bool_fixed
@@ -53,6 +55,12 @@ class TripletMining:
         else:
             # Use the full batch size
             self.batch_size = self.config.similarity_per_anim_class_num
+
+        # For pointing with complete neutral exclusion, we don't use class-neutral distances
+        if self.exclude_neutral_completely:
+            self.use_neutral_distances = False
+        else:
+            self.use_neutral_distances = True
 
         self.initialize_triplet_mining(anim_name)
 
@@ -197,6 +205,38 @@ class TripletMining:
         return neutral_embedding, modified_embeddings
 
     def calculate_distances(self, embeddings):
+        """Modified to handle pointing without neutral"""
+        try:
+            if self.anim_name == 'pointing' and self.exclude_neutral_completely:
+                # For pointing, no neutral embedding exists - only calculate pairwise distances
+                # All embeddings are non-neutral classes
+                modified_embeddings = embeddings
+
+                # Calculate left-right distances between all embeddings
+                dot_product = torch.matmul(modified_embeddings, modified_embeddings.T)
+                square_norm = torch.sum(modified_embeddings ** 2, dim=1)
+                left_right_distances = square_norm.unsqueeze(1) + square_norm.unsqueeze(0) - 2.0 * dot_product
+                left_right_distances = torch.clamp(left_right_distances, min=0.0)
+
+                if not self.squared_left_right_euc_dist:
+                    epsilon = 1e-12
+                    left_right_distances = torch.sqrt(left_right_distances + epsilon)
+
+                # For pointing, no class-neutral distances - set to zeros or a constant
+                # This effectively removes the neutral anchor from the loss computation
+                self.tensor_dists_class_neut = torch.zeros(modified_embeddings.shape[0],
+                                                           dtype=torch.float32,
+                                                           requires_grad=False)
+
+                return left_right_distances
+            else:
+                # Original behavior for walking
+                return self.calculate_distances_original(embeddings)
+        except Exception as e:
+            print(f"Error in calculate_distances: {e}")
+            raise e
+
+    def calculate_distances_original(self, embeddings):
         """
         Calculate both:
         1. 1D tensor of distances between class embeddings and the neutral embedding

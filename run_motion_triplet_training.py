@@ -84,12 +84,12 @@ def check_gpu_access():
 #
 #     return train_indices, val_indices
 
-def create_train_val_split(similarity_dicts, val_ratio=0.4):
+def create_train_val_split(similarity_dicts_list, val_ratio=0.4):
     """
     Create deterministic training and validation indices for each animation type.
 
     Args:
-        similarity_dicts: List of dictionaries containing class exemplars for each animation
+        similarity_dicts_list: List of dictionaries containing class exemplars for each animation
         val_ratio: Ratio of classes to use for validation
 
     Returns:
@@ -100,7 +100,7 @@ def create_train_val_split(similarity_dicts, val_ratio=0.4):
     train_indices = []
     val_indices = []
 
-    for anim_dict in similarity_dicts:
+    for anim_dict in similarity_dicts_list:
         # Get keys except neutral and sort them for deterministic order
         keys = sorted(k for k in anim_dict.keys() if k != (0, 0, 0, 0))
 
@@ -276,8 +276,22 @@ if __name__ == '__main__':
         pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
         list_similarity_dicts = [pointing_similarity_dict]
         animation_names = ['pointing']
+    # elif args.animation == 'walking_pointing':
+    #     pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
+    #     list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict]
+    #     animation_names = ['walking', 'pointing']
     elif args.animation == 'walking_pointing':
-        pointing_similarity_dict = osd.load_similarity_data(bool_drop_neutral_exemplar, "pointing", config)["train"]
+        pointing_similarity_dict = osd.load_similarity_data(
+            bool_drop_neutral_exemplar=True,  # Drop neutral for pointing too
+            anim_name="pointing",
+            config=config,
+            exclude_neutral_completely=True  # New parameter to completely exclude neutral
+        )["train"]
+
+        # Remove neutral from pointing dict entirely if it exists
+        if (0, 0, 0, 0) in pointing_similarity_dict:
+            del pointing_similarity_dict[(0, 0, 0, 0)]
+
         list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict]
         animation_names = ['walking', 'pointing']
     elif args.animation == 'picking':

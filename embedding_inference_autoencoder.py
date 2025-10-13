@@ -986,7 +986,8 @@ def main_with_refinement():
     # Set up paths and model parameters for EMBEDDING MODEL
     architecture_variant = 0
     # Use embedding model checkpoint
-    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_003.pt"
+    # checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_003_proven_to_work.pt"
+    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_024.pt"
 
     print(f"Using model checkpoint: {checkpoint_path}")
 
@@ -1665,4 +1666,4 @@ def main_without_refinement():
     print(f"{'=' * 70}")
 
 if __name__ == "__main__":
-    main_without_refinement()
+    main_with_refinement()

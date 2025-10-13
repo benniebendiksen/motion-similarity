@@ -802,7 +802,7 @@ class SimilarityNetwork:
                 print(f"Current Learning Rate: {current_lr:.8f}")
 
                 # Save checkpoint if this is the best model by loss
-                if val_epoch_loss < best_val_loss or train_epoch_loss < best_train_loss:
+                if val_epoch_loss < best_val_loss:
                     best_val_loss = val_epoch_loss
                     best_train_loss = train_epoch_loss
                     self.save_checkpoint(epoch + 1, val_correlation, val_r2)
@@ -1596,7 +1596,7 @@ class EmbeddingRefiningSimilarityNetwork:
                 print(f"Current Learning Rate: {current_lr:.8f}")
 
                 # Save checkpoint if this is the best model by loss
-                if val_epoch_loss < best_val_loss or epoch_loss < best_train_loss:
+                if val_epoch_loss < best_val_loss:
                     best_val_loss = val_epoch_loss
                     best_train_loss = epoch_loss
                     self.save_checkpoint(epoch + 1)

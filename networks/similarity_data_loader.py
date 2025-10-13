@@ -50,6 +50,11 @@ class SimilarityDataLoader(keras.utils.Sequence):
             curr_valid_indices = None if valid_indices is None else valid_indices[i]
 
             for _, (class_tuple, value) in enumerate(similarity_dict.items()):
+                # Skip neutral for pointing if it somehow exists (defensive programming)
+                # if i == 1 and class_tuple == (0, 0, 0, 0):  # Index 1 is pointing
+                #     print("Skipping neutral from the construction of dict_similarity_exemplars and list_tuples_dict_idx_class_tuple")
+                #     continue
+
                 # Skip if not in valid indices. A train/val split ensuring mechanism
                 if curr_valid_indices is not None and class_tuple not in curr_valid_indices:
                     continue

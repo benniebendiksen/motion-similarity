@@ -32,7 +32,7 @@ from networks.triplet_mining import TripletMining
 from Config import Config
 
 
-def setup_embedding_training(embedding_dir, config, combination_method='concat'):
+def setup_embedding_training(embedding_dir_walking, embedding_dir_pointing, embedding_dir_picking, config, combination_method='concat'):
     """
     Set up all components for embedding-based triplet training.
 
@@ -47,12 +47,39 @@ def setup_embedding_training(embedding_dir, config, combination_method='concat')
             bool_drop=True,  # Drop neutral exemplar
             anim_name="walking",
             config=config,
-            embedding_dir=embedding_dir,
+            embedding_dir=embedding_dir_walking,
             combination_method=combination_method,
             force_regenerate=True  # Force regeneration to ensure we use embeddings
         )["train"]
 
-        print(f"Loaded {len(walking_similarity_dict)} effort classes from embeddings")
+        pointing_similarity_dict = load_similarity_data_from_embeddings(
+            bool_drop=True,  # Drop neutral exemplar
+            anim_name="pointing",
+            config=config,
+            embedding_dir=embedding_dir_pointing,
+            combination_method=combination_method,
+            force_regenerate=True  # Force regeneration to ensure we use embeddings
+        )["train"]
+
+        picking_similarity_dict = load_similarity_data_from_embeddings(
+            bool_drop=True,  # Drop neutral exemplar
+            anim_name="picking",
+            config=config,
+            embedding_dir=embedding_dir_picking,
+            combination_method=combination_method,
+            force_regenerate=True  # Force regeneration to ensure we use embeddings
+        )["train"]
+
+        # Remove neutral from pointing dict entirely if it exists
+        if (0, 0, 0, 0) in pointing_similarity_dict:
+            del pointing_similarity_dict[(0, 0, 0, 0)]
+
+        # Repeat for picking
+        if (0, 0, 0, 0) in picking_similarity_dict:
+            del picking_similarity_dict[(0, 0, 0, 0)]
+
+        print(f"Loaded {len(walking_similarity_dict)} walking effort classes from embeddings")
+        print(f"Loaded {len(pointing_similarity_dict)} pointing effort classes from embeddings")
 
     except Exception as e:
         print(f"Error loading similarity data: {e}")
@@ -60,35 +87,63 @@ def setup_embedding_training(embedding_dir, config, combination_method='concat')
 
         # Create similarity data from scratch
         output_path, walking_similarity_dict = create_embedding_similarity_data(
-            embedding_dir,
+            embedding_dir_walking,
             config.similarity_exemplars_dir,
             combination_method
         )
         print(f"Created {len(walking_similarity_dict)} effort classes")
 
+        output_path, pointing_similarity_dict = create_embedding_similarity_data(
+            embedding_dir_pointing,
+            config.similarity_exemplars_dir,
+            combination_method
+        )
+        print(f"Created {len(pointing_similarity_dict)} effort classes")
+
+        output_path, picking_similarity_dict = create_embedding_similarity_data(
+            embedding_dir_picking,
+            config.similarity_exemplars_dir,
+            combination_method
+        )
+
     # Create simple train/val split
-    def create_train_val_split(similarity_dict, val_ratio=0.4):
+    def create_train_val_split(similarity_dicts_list, val_ratio=0.4):
         """Simple train/val split for a single animation."""
         import random
 
-        keys = [k for k in similarity_dict.keys() if k != (0, 0, 0, 0)]
-        val_size = max(1, int(len(keys) * val_ratio))
+        train_indices = []
+        val_indices = []
 
-        val_keys = set(random.sample(keys, val_size))
-        train_keys = set(k for k in keys if k not in val_keys)
+        for anim_dict in similarity_dicts_list:
+            keys = [k for k in anim_dict.keys() if k != (0, 0, 0, 0)]
+            val_size = max(1, int(len(keys) * val_ratio))
 
-        # Always include neutral in both if it exists
-        if (0, 0, 0, 0) in similarity_dict:
-            train_keys.add((0, 0, 0, 0))
-            val_keys.add((0, 0, 0, 0))
+            val_keys = set(random.sample(keys, val_size))
+            train_keys = set(k for k in keys if k not in val_keys)
 
-        return [train_keys], [val_keys]
+            # Add neutral exemplar to both sets if present
+            if (0, 0, 0, 0) in anim_dict:
+                train_keys.add((0, 0, 0, 0))
+                val_keys.add((0, 0, 0, 0))
+            else:
+                print("No neutral exemplar found to add to both train and val sets")
+
+            train_indices.append(train_keys)
+            val_indices.append(val_keys)
+
+        return train_indices, val_indices
 
     # Split data
-    train_indices, val_indices = create_train_val_split(walking_similarity_dict)
+    train_indices, val_indices = create_train_val_split([walking_similarity_dict, pointing_similarity_dict])
+    # train_indices, val_indices = create_train_val_split([walking_similarity_dict])
+
+
 
     # Create data loaders
-    list_similarity_dicts = [walking_similarity_dict]
+    list_similarity_dicts = [walking_similarity_dict, pointing_similarity_dict]
+    # list_similarity_dicts = [walking_similarity_dict]
+    animation_names = ["walking", "pointing"]
+    # animation_names = ["walking"]
 
     train_loader = EmbeddingSimilarityDataLoader(
         list_similarity_dicts, config, shuffle=True, valid_indices=train_indices
@@ -102,32 +157,91 @@ def setup_embedding_training(embedding_dir, config, combination_method='concat')
     print(f"  Validation: {val_loader.num_classes} classes")
     print(f"  Embedding dimension: {train_loader.exemplar_dim}")
 
-    # Create triplet mining modules
-    train_triplet = TripletMining(
-        bool_drop=True,
-        bool_fixed=True,
-        squared_left_right=False,
-        squared_class_neut=False,
-        anim_name="walking",
-        config=config,
-        valid_indices=train_indices[0]
-    )
+    # Create training and validation triplet modules
+    train_triplet_modules = []
+    val_triplet_modules = []
 
-    val_triplet = TripletMining(
-        bool_drop=True,
-        bool_fixed=True,
-        squared_left_right=False,
-        squared_class_neut=False,
-        anim_name="walking",
-        config=config,
-        valid_indices=val_indices[0]
-    )
+    for i, anim_name in enumerate(animation_names):
+        if anim_name == "walking":
+            triplet_module = TripletMining(
+                bool_drop=True,
+                bool_fixed=True,
+                squared_left_right=False,
+                squared_class_neut=False,
+                anim_name=anim_name,
+                config=config,
+                valid_indices=train_indices[i]
+            )
+            print(f"Walking triplet_mining use_neutral: {triplet_module.use_neutral_distances}")
 
-    return train_loader, val_loader, [train_triplet], [val_triplet]
+            train_triplet_modules.append(triplet_module)
+
+            val_triplet_module = TripletMining(
+                bool_drop=True,
+                bool_fixed=True,
+                squared_left_right=False,
+                squared_class_neut=False,
+                anim_name=anim_name,
+                config=config,
+                valid_indices=val_indices[i]
+            )
+
+            val_triplet_modules.append(val_triplet_module)
+
+        elif anim_name == "pointing":
+            triplet_module_2 = TripletMining(
+                bool_drop=True,
+                bool_fixed=True,
+                squared_left_right=False,
+                squared_class_neut=False,
+                anim_name=anim_name,
+                config=config,
+                valid_indices=train_indices[i],
+                exclude_neutral_completely=True  # Ensure neutral is excluded completely for pointing
+            )
+            print(f"Pointing triplet_mining use_neutral: {triplet_module_2.use_neutral_distances}")
+            train_triplet_modules.append(triplet_module_2)
+
+            val_triplet_module_2 = TripletMining(
+                bool_drop=True,
+                bool_fixed=True,
+                squared_left_right=False,
+                squared_class_neut=False,
+                anim_name=anim_name,
+                config=config,
+                valid_indices=val_indices[i],
+                exclude_neutral_completely=True  # Ensure neutral is excluded completely for pointing
+            )
+            val_triplet_modules.append(val_triplet_module_2)
+
+    # # Create triplet mining modules
+    # train_triplet = TripletMining(
+    #     bool_drop=True,
+    #     bool_fixed=True,
+    #     squared_left_right=False,
+    #     squared_class_neut=False,
+    #     anim_name="walking",
+    #     config=config,
+    #     valid_indices=train_indices[0]
+    # )
+    #
+    # val_triplet = TripletMining(
+    #     bool_drop=True,
+    #     bool_fixed=True,
+    #     squared_left_right=False,
+    #     squared_class_neut=False,
+    #     anim_name="walking",
+    #     config=config,
+    #     valid_indices=val_indices[0]
+    # )
+
+    return train_loader, val_loader, train_triplet_modules, val_triplet_modules
 
 
 def run_embedding_triplet_training(
-        embedding_dir,
+        embedding_dir_walking,
+        embedding_dir_pointing,
+        embedding_dir_picking,
         combination_method='concat',
         use_perception_loss=False,
         use_adaptive_distance=False,
@@ -148,7 +262,7 @@ def run_embedding_triplet_training(
 
     # Setup training components
     train_loader, val_loader, train_triplet_modules, val_triplet_modules = setup_embedding_training(
-        embedding_dir, config, combination_method
+        embedding_dir_walking, embedding_dir_pointing, embedding_dir_picking, config, combination_method
     )
 
     # Create embedding-aware similarity network
@@ -172,7 +286,7 @@ def run_embedding_triplet_training(
     print("\n" + "=" * 40)
     print("TRAINING CONFIGURATION")
     print("=" * 40)
-    print(f"Embedding directory: {embedding_dir}")
+    print(f"Embedding directory: {embedding_dir_walking}")
     print(f"Combination method: {combination_method}")
     print(f"Training classes: {train_loader.num_classes}")
     print(f"Validation classes: {val_loader.num_classes}")
@@ -214,7 +328,10 @@ def main():
     # Required arguments
     parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_encoded',
                         help='Directory containing embedding files (.pt files)')
-
+    parser.add_argument('--embedding-dir-2', type=str, default='../datasets/lma_perform_pointing_encoded',
+                        help='Directory for second animation embeddings (pointing)')
+    parser.add_argument('--embedding-dir-3', type=str, default='../datasets/lma_perform_picking_encoded',
+                        help='Directory for second animation embeddings (pointing)')
     # Optional arguments
     parser.add_argument('--combination-method', type=str, default='rots_only',
                         choices=['concat', 'weighted', 'root_only', 'rots_only'],
@@ -226,7 +343,7 @@ def main():
     parser.add_argument('--scheduler', type=str, default='plateau',
                         choices=['plateau', 'cosine', 'step'],
                         help='Learning rate scheduler')
-    parser.add_argument('--epochs', type=int, default=500,
+    parser.add_argument('--epochs', type=int, default=200,
                         help='Number of training epochs')
     parser.add_argument('--test-loading', action='store_true',
                         help='Only test loading embeddings without training')
@@ -269,7 +386,9 @@ def main():
     # Run full training
     try:
         network, results = run_embedding_triplet_training(
-            embedding_dir=args.embedding_dir,
+            embedding_dir_walking=args.embedding_dir,
+            embedding_dir_pointing=args.embedding_dir_2,
+            embedding_dir_picking=args.embedding_dir_3,
             combination_method=args.combination_method,
             use_perception_loss=args.use_perception_loss,
             use_adaptive_distance=args.use_adaptive_distance,
