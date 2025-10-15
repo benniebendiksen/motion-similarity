@@ -37,6 +37,7 @@ import torch
 import pickle
 import time
 from itertools import combinations
+from pathlib import Path
 
 # Add necessary paths
 curr_path = os.getcwd()
@@ -983,11 +984,26 @@ def main_with_refinement():
     # Initialize configuration
     config = Config()
 
+    # Load the learned neutral representations
+    neutral_path = Path(config.checkpoint_root_dir) / "learned_neutrals.pkl"
+
+    if neutral_path.exists():
+        with open(neutral_path, 'rb') as f:
+            neutral_data = pickle.load(f)
+        learned_neutrals = neutral_data['neutral_representations']
+        print("Loaded learned neutral representations:")
+        for anim_name, neutral in learned_neutrals.items():
+            print(f"  {anim_name}: shape {neutral.shape}")
+    else:
+        print("WARNING: No learned_neutrals.pkl found!")
+        learned_neutrals = None
+
     # Set up paths and model parameters for EMBEDDING MODEL
     architecture_variant = 0
     # Use embedding model checkpoint
     # checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_003_proven_to_work.pt"
-    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_024.pt"
+    # checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_024.pt"
+    checkpoint_path = "/Users/bendiksen/Desktop/research/vr_lab/motion-similarity-project/model_checkpoint/0_embedding_model_epoch_001.pt"
 
     print(f"Using model checkpoint: {checkpoint_path}")
 

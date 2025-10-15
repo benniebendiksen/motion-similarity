@@ -320,6 +320,10 @@ def calculate_triplet_loss_with_neutral(y_true, y_pred, triplet_mining, batch_st
     #           triplet_loss_L_R_from_LN + triplet_loss_R_L_from_LN)
     # losses = (triplet_loss_L_R + triplet_loss_R_L)
 
+    print(f"DEBUG: Total violations before clamp: {torch.sum(losses > 0).item()}")
+    print(f"DEBUG: Max loss value: {torch.max(losses).item():.4f}")
+    print(f"DEBUG: Mean loss value: {torch.mean(losses).item():.4f}")
+
     # Validate the final losses
     assert torch.all(losses >= 0.0), "Negative losses exist"
     assert losses.shape == (triplet_mining.num_states_drives, triplet_mining.num_states_drives), \

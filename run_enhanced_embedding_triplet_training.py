@@ -170,7 +170,7 @@ class EnhancedEmbeddingTrainer:
     
     def _create_stratified_split(self, 
                                 similarity_dicts: List[Dict],
-                                val_ratio: float = 0.4) -> Tuple[List, List]:
+                                val_ratio: float = 0.5) -> Tuple[List, List]:
         """
         Create stratified train/validation split ensuring balanced effort representation.
         

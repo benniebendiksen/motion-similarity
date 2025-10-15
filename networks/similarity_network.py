@@ -1497,6 +1497,13 @@ class EmbeddingRefiningSimilarityNetwork:
 
         self.criterion = self.train_criterion
 
+        # Create test criterion
+        self.test_criterion = custom_losses.create_batch_triplet_loss(
+            self.val_triplet_modules,
+            self.test_loader.module_start_indices,
+            self.test_loader.module_sizes
+        )
+
         # Setup optimizer - match the original network's settings exactly
         self.optimizer = optim.Adam(self.network.parameters(), lr=self.initial_lr, betas=(0.5, 0.999))
 
@@ -1583,6 +1590,9 @@ class EmbeddingRefiningSimilarityNetwork:
                 # Calculate average validation loss
                 val_epoch_loss = val_loss / val_batch_count if val_batch_count > 0 else float('inf')
                 self.history['val_loss'].append(val_epoch_loss)
+                if val_epoch_loss == 0.0:
+                    print("⚠️ WARNING: Validation loss is exactly zero!")
+                    print(f"Number of validation samples: {len(self.validation_loader)}")
 
                 # Step the scheduler
                 if self.scheduler:
@@ -1652,7 +1662,8 @@ class EmbeddingRefiningSimilarityNetwork:
                 labels = labels.to(self.device)
 
                 outputs = self.network(inputs)
-                loss = self.criterion(labels, outputs)
+                # loss = self.criterion(labels, outputs)
+                loss = self.test_criterion(labels, outputs)  # Use test criterion
 
                 test_loss += loss.item()
                 batch_count += 1
