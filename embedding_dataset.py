@@ -225,7 +225,7 @@ class EmbeddingDataset:
 
     def create_similarity_dict(self, combination_method='concat'):
         """
-        Create a similarity dictionary compatible with your existing triplet training code.
+        Create a similarity dictionary compatible with existing triplet training code.
 
         Returns:
             Dictionary mapping effort tuples to embeddings, compatible with existing code structure
