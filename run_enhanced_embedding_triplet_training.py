@@ -112,7 +112,7 @@ class EnhancedEmbeddingTrainer:
         )
         
         # Save learned neutrals for reproducibility
-        neutral_save_path = self.config.checkpoint_root_dir / "learned_neutrals.pkl"
+        neutral_save_path = Path(self.config.checkpoint_root_dir) / "learned_neutrals.pkl"
         self.neutral_learner.save_neutrals(neutral_save_path)
         
         # Replace existing neutral exemplars with learned ones
@@ -355,7 +355,7 @@ def run_enhanced_triplet_training(
     logger.info("=" * 40)
     
     # Save training summary
-    summary_path = config.checkpoint_root_dir / "training_summary.txt"
+    summary_path = Path(config.checkpoint_root_dir) / "training_summary.txt"
     with open(summary_path, 'w') as f:
         f.write("Enhanced Triplet Training Summary\n")
         f.write("=" * 40 + "\n")
