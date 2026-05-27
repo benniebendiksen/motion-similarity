@@ -17,7 +17,8 @@
 
 #SBATCH --job-name=motion_sim
 #SBATCH --partition=DGXH200
-#SBATCH --account=cs_funda.durupinarbabur
+#SBATCH --account=impact
+#SBATCH --qos=24hr
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
