@@ -11,7 +11,7 @@ import pickle
 
 
 class TripletMining:
-    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None, exclude_neutral_completely=False):
+    def __init__(self, bool_drop, bool_fixed, squared_left_right, squared_class_neut, anim_name, config, valid_indices=None, exclude_neutral_completely=False, preloaded_dict=None):
         self.config = config
         self.anim_name = anim_name
         self.dict_similarity_classes_exemplars = {}
@@ -61,9 +61,9 @@ class TripletMining:
         else:
             self.use_neutral_distances = True
 
-        self.initialize_triplet_mining(anim_name)
+        self.initialize_triplet_mining(anim_name, preloaded_dict=preloaded_dict)
 
-    def initialize_triplet_mining(self, anim_name):
+    def initialize_triplet_mining(self, anim_name, preloaded_dict=None):
         """
         Initialize the triplet mining module's state variables.
 
@@ -78,9 +78,15 @@ class TripletMining:
 
         print("Initializing Triplet Mining module state variables")
 
-        # Load the full dictionary
-        self.dict_similarity_classes_exemplars = pickle.load(open(
-            self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
+        # Use a caller-supplied dict (embedding pipelines) or load from pickle (raw-motion pipelines).
+        # Embedding pipelines pass preloaded_dict so the raw-motion pickle is never read,
+        # avoiding type mismatches between AE embedding vectors and raw-motion arrays.
+        if preloaded_dict is not None:
+            print(f"  Using preloaded dict ({len(preloaded_dict)} classes) — skipping pickle load.")
+            self.dict_similarity_classes_exemplars = preloaded_dict
+        else:
+            self.dict_similarity_classes_exemplars = pickle.load(open(
+                self.config.similarity_exemplars_dir + anim_name + "_" + self.config.similarity_dict_file_name, "rb"))
         # print(f"Full dictionary classes: {len(self.dict_similarity_classes_exemplars.keys())}")
 
         # If valid_indices is provided, subset the dictionary

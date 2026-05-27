@@ -197,13 +197,15 @@ if __name__ == '__main__':
         train_triplet = TripletMining(
             bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
             squared_left_right_euc_dist, squared_class_neut_euc_dist,
-            anim_name, config, valid_indices=train_indices[idx]
+            anim_name, config, valid_indices=train_indices[idx],
+            preloaded_dict=list_similarity_dicts[idx]
         )
 
         val_triplet = TripletMining(
             bool_drop_neutral_exemplar, bool_fixed_neutral_embedding,
             squared_left_right_euc_dist, squared_class_neut_euc_dist,
-            anim_name, config, valid_indices=val_indices[idx]
+            anim_name, config, valid_indices=val_indices[idx],
+            preloaded_dict=list_similarity_dicts[idx]
         )
 
         train_triplet_modules.append(train_triplet)

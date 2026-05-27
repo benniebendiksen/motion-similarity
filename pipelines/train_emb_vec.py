@@ -173,7 +173,8 @@ def setup_embedding_training(embedding_dir_walking, embedding_dir_pointing, embe
                 squared_class_neut=False,
                 anim_name=anim_name,
                 config=config,
-                valid_indices=train_indices[i]
+                valid_indices=train_indices[i],
+                preloaded_dict=list_similarity_dicts[i]
             )
             print(f"Walking triplet_mining use_neutral: {triplet_module.use_neutral_distances}")
 
@@ -186,7 +187,8 @@ def setup_embedding_training(embedding_dir_walking, embedding_dir_pointing, embe
                 squared_class_neut=False,
                 anim_name=anim_name,
                 config=config,
-                valid_indices=val_indices[i]
+                valid_indices=val_indices[i],
+                preloaded_dict=list_similarity_dicts[i]
             )
 
             val_triplet_modules.append(val_triplet_module)
@@ -200,7 +202,8 @@ def setup_embedding_training(embedding_dir_walking, embedding_dir_pointing, embe
                 anim_name=anim_name,
                 config=config,
                 valid_indices=train_indices[i],
-                exclude_neutral_completely=True  # Ensure neutral is excluded completely for pointing
+                exclude_neutral_completely=True,  # Ensure neutral is excluded completely for pointing
+                preloaded_dict=list_similarity_dicts[i]
             )
             print(f"Pointing triplet_mining use_neutral: {triplet_module_2.use_neutral_distances}")
             train_triplet_modules.append(triplet_module_2)
@@ -213,7 +216,8 @@ def setup_embedding_training(embedding_dir_walking, embedding_dir_pointing, embe
                 anim_name=anim_name,
                 config=config,
                 valid_indices=val_indices[i],
-                exclude_neutral_completely=True  # Ensure neutral is excluded completely for pointing
+                exclude_neutral_completely=True,  # Ensure neutral is excluded completely for pointing
+                preloaded_dict=list_similarity_dicts[i]
             )
             val_triplet_modules.append(val_triplet_module_2)
 

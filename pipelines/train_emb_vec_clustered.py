@@ -52,6 +52,7 @@ class EnhancedEmbeddingTrainer:
         self.config = config
         self.neutral_learner = None
         self.learned_neutrals = {}
+        self.animation_dicts = {}  # populated by setup_clustering_based_training
         
     def setup_clustering_based_training(self,
                                        embedding_dirs: Dict[str, str],
@@ -135,9 +136,12 @@ class EnhancedEmbeddingTrainer:
             val_ratio=0.4
         )
         
+        # Store for use in _create_triplet_modules_with_learned_neutrals
+        self.animation_dicts = animation_dicts
+
         # Create data loaders
         list_similarity_dicts = list(animation_dicts.values())
-        
+
         train_loader = EmbeddingSimilarityDataLoader(
             list_similarity_dicts, 
             self.config, 
@@ -247,7 +251,8 @@ class EnhancedEmbeddingTrainer:
                 anim_name=anim_name,
                 config=self.config,
                 valid_indices=indices[i],
-                exclude_neutral_completely=False  # Use neutral in training
+                exclude_neutral_completely=False,  # Use neutral in training
+                preloaded_dict=self.animation_dicts.get(anim_name)
             )
             
             # Set the learned neutral representation
