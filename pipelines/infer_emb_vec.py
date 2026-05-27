@@ -65,6 +65,30 @@ import src.organize_synthetic_data as osd
 from src.organize_synthetic_data import load_similarity_data_from_embeddings, EmbeddingSimilarityDataLoader
 
 
+def _infer_combination_method(checkpoint_path):
+    """
+    Read the saved embedding_dim from a checkpoint to determine which AE
+    combination method was used during training.
+      (1024,) / 1024  →  'concat'   (root 512 + rots 512)
+      (512,)  / 512   →  'rots_only'
+    Falls back to 'rots_only' if the checkpoint cannot be read.
+    """
+    try:
+        ck = torch.load(checkpoint_path, map_location='cpu')
+        emb_dim = ck.get('embedding_dim')
+        if emb_dim is not None:
+            dim = emb_dim[0] if isinstance(emb_dim, (tuple, list)) else int(emb_dim)
+            return 'concat' if dim >= 1024 else 'rots_only'
+        # Fallback: check first 2-D weight tensor in model_state_dict
+        sd = ck.get('model_state_dict', {})
+        for val in sd.values():
+            if isinstance(val, torch.Tensor) and val.dim() == 2:
+                return 'concat' if val.shape[1] >= 1024 else 'rots_only'
+    except Exception:
+        pass
+    return 'rots_only'
+
+
 def create_train_val_split(similarity_dicts, val_ratio=0.4):
     """
     Create deterministic training and validation indices for each animation type.
@@ -1016,6 +1040,11 @@ def main_with_refinement():
 
     print(f"Using model checkpoint: {checkpoint_path}")
 
+    # Detect which AE combination method the checkpoint was trained with so that
+    # inference loads embeddings of the matching dimensionality.
+    combination_method = _infer_combination_method(checkpoint_path)
+    print(f"Detected combination method from checkpoint: {combination_method}")
+
     bool_drop_neutral_exemplar = True
     bool_fixed_neutral_embedding = True
     squared_left_right_euc_dist = False
@@ -1096,7 +1125,7 @@ def main_with_refinement():
             embedding_similarity_dict = load_similarity_data_from_embeddings(
                 bool_drop=True, anim_name=anim_name, config=config,
                 embedding_dir=str(_DATASETS / f"lma_perform_{anim_name}_ae_paired"),
-                combination_method="rots_only", force_regenerate=True)["train"]
+                combination_method=combination_method, force_regenerate=True)["train"]
 
             # Filter by valid_indices if evaluating only validation set
             if evaluate_only_validation:
