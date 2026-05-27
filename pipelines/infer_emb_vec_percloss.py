@@ -620,7 +620,7 @@ def get_raw_features_without_dataloader(anim_name, config, valid_indices=None, b
         raw_tensor = exemplars[0]
 
         # Only convert to numpy for compatibility
-        if isinstance(raw_tensor, tf.Tensor):
+        if _TF_AVAILABLE and isinstance(raw_tensor, tf.Tensor):
             numpy_tensor = raw_tensor.numpy().copy()
         elif isinstance(raw_tensor, np.ndarray):
             numpy_tensor = raw_tensor.copy()
@@ -719,7 +719,7 @@ def compute_geodesic_distances(dict_raw_features):
         sample = dict_raw_features[key]
         if isinstance(sample, list) and len(sample) > 0:
             sample = sample[0]
-        if isinstance(sample, tf.Tensor):
+        if _TF_AVAILABLE and isinstance(sample, tf.Tensor):
             sample = sample.numpy()
 
         reshaped = sample.reshape(num_frames, num_joints, 4)
@@ -738,7 +738,7 @@ def compute_geodesic_distances(dict_raw_features):
             sample = sample[0]
 
         # Convert to numpy if needed
-        if isinstance(sample, tf.Tensor):
+        if _TF_AVAILABLE and isinstance(sample, tf.Tensor):
             sample = sample.numpy()
         elif not isinstance(sample, np.ndarray):
             raise Exception(f"Sample is not a tf.Tensor or np.ndarray but: {type(sample)}")

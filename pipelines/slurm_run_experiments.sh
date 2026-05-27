@@ -89,8 +89,17 @@ cd "${PROJECT_ROOT}"
 # by run_all_experiments.py; MOTION_IS_REMOTE handles the BVH / exemplar dirs.
 export MOTION_IS_REMOTE=1
 
+# Pass --skip-training when the caller sets SKIP_TRAINING=1 in the environment.
+# Example: sbatch --export=ALL,SKIP_TRAINING=1 --array=0-7 pipelines/slurm_run_experiments.sh
+SKIP_FLAG=""
+if [ "${SKIP_TRAINING:-0}" = "1" ]; then
+    SKIP_FLAG="--skip-training"
+    echo "Training will be skipped (SKIP_TRAINING=1)."
+fi
+
 python pipelines/run_all_experiments.py \
     --only "${EXP_NAME}" \
+    ${SKIP_FLAG} \
     2>&1 | tee "${LOG_DIR}/run.log"
 
 EXIT_CODE=$?
