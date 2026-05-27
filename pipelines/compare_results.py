@@ -89,14 +89,16 @@ def ranked_table(
                 continue
             for dist, entry in mdict.items():
                 rows.append({
-                    "exp":       r["experiment"],
-                    "desc":      r["description"],
-                    "anim":      anim,
-                    "dist":      dist,
-                    "pearson":   entry.get("emb_pearson"),
-                    "spearman":  entry.get("emb_spearman"),
-                    "r2":        entry.get("emb_r2"),
-                    "winner":    entry.get("winner") or "",
+                    "exp":          r["experiment"],
+                    "anim":         anim,
+                    "dist":         dist,
+                    "pearson":      entry.get("emb_pearson"),
+                    "spearman":     entry.get("emb_spearman"),
+                    "r2":           entry.get("emb_r2"),
+                    "raw_pearson":  entry.get("raw_pearson"),
+                    "raw_spearman": entry.get("raw_spearman"),
+                    "raw_r2":       entry.get("raw_r2"),
+                    "winner":       entry.get("winner") or "",
                 })
 
     if not rows:
@@ -110,8 +112,8 @@ def ranked_table(
 
     sort_key = {"pearson": "pearson", "spearman": "spearman", "r2": "r2"}.get(sort_col, "pearson")
 
-    col_exp  = 30
-    col_val  = 12
+    col_exp = 28
+    col_v   = 11
 
     for anim in anims:
         for dist in DIST_METRICS:
@@ -129,27 +131,36 @@ def ranked_table(
 
             title = f"\n  {anim.upper()}  ·  Embedding L2 vs {dist.upper()}"
             print(title)
-            print("  " + "─" * 68)
+            print("  " + "─" * 100)
             hdr = (
                 f"  {'Experiment':<{col_exp}}"
-                f"{'Pearson r':>{col_val}}"
-                f"{'Spearman r':>{col_val}}"
-                f"{'R²':>{col_val}}"
-                f"{'Winner':>{col_val}}"
+                f"{'Emb-Pear':>{col_v}}"
+                f"{'Raw-Pear':>{col_v}}"
+                f"{'Emb-Spear':>{col_v}}"
+                f"{'Raw-Spear':>{col_v}}"
+                f"{'Emb-R²':>{col_v}}"
+                f"{'Raw-R²':>{col_v}}"
+                f"{'Beats?':>8}"
             )
             print(hdr)
-            print("  " + "─" * 68)
+            print("  " + "─" * 100)
 
             for r in subset:
                 v = r[sort_key]
                 is_best   = (v is not None and v == best_val)
                 is_second = (v is not None and v == second_val and not is_best)
+                ep = r["pearson"]
+                rp = r["raw_pearson"]
+                beats = ("YES" if ep > rp else "no") if (ep is not None and rp is not None) else ""
                 line = (
                     f"  {r['exp']:<{col_exp}}"
-                    f"{_fmt(r['pearson'],  is_best and sort_key=='pearson',  is_second and sort_key=='pearson'):>{col_val}}"
-                    f"{_fmt(r['spearman'], is_best and sort_key=='spearman', is_second and sort_key=='spearman'):>{col_val}}"
-                    f"{_fmt(r['r2'],       is_best and sort_key=='r2',       is_second and sort_key=='r2'):>{col_val}}"
-                    f"{r['winner']:>{col_val}}"
+                    f"{_fmt(r['pearson'],  is_best and sort_key=='pearson',  is_second and sort_key=='pearson'):>{col_v}}"
+                    f"{_fmt(r['raw_pearson']):>{col_v}}"
+                    f"{_fmt(r['spearman'], is_best and sort_key=='spearman', is_second and sort_key=='spearman'):>{col_v}}"
+                    f"{_fmt(r['raw_spearman']):>{col_v}}"
+                    f"{_fmt(r['r2'],       is_best and sort_key=='r2',       is_second and sort_key=='r2'):>{col_v}}"
+                    f"{_fmt(r['raw_r2']):>{col_v}}"
+                    f"{beats:>8}"
                 )
                 print(line)
 
@@ -193,15 +204,21 @@ def export_csv(results: List[Dict], csv_path: Path) -> None:
     for r in results:
         for anim, mdict in r.get("metrics", {}).items():
             for dist, entry in mdict.items():
+                ep = entry.get("emb_pearson")
+                rp = entry.get("raw_pearson")
                 rows.append({
                     "experiment":    r["experiment"],
                     "description":   r.get("description", ""),
                     "checkpoint":    r.get("checkpoint", ""),
                     "animation":     anim,
                     "distance_type": dist,
-                    "emb_pearson":   entry.get("emb_pearson"),
+                    "emb_pearson":   ep,
                     "emb_spearman":  entry.get("emb_spearman"),
                     "emb_r2":        entry.get("emb_r2"),
+                    "raw_pearson":   rp,
+                    "raw_spearman":  entry.get("raw_spearman"),
+                    "raw_r2":        entry.get("raw_r2"),
+                    "emb_beats_raw": (ep > rp) if (ep is not None and rp is not None) else None,
                     "winner":        entry.get("winner", ""),
                 })
     if not rows:
