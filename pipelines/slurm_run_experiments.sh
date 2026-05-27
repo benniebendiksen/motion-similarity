@@ -1,7 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# SLURM array job — runs all 8 motion-similarity experiments on DGXH200.
+# SLURM array job — runs all 8 motion-similarity experiments on AICORE_H200.
 # All 8 tasks are submitted simultaneously; SLURM schedules them as GPUs free.
+#
+# Partition notes (chimera):
+#   AICORE_H200 + account=impact + qos=aicore → full H200 on chimera24,
+#   non-preemptible by class jobs.  Max walltime ~4 days.
 #
 # Submit from the project root:
 #   sbatch pipelines/slurm_run_experiments.sh
@@ -16,15 +20,16 @@
 # =============================================================================
 
 #SBATCH --job-name=motion_sim
-#SBATCH --partition=DGXH200
+#SBATCH --partition=AICORE_H200
 #SBATCH --account=impact
-#SBATCH --qos=24hr
+#SBATCH --qos=aicore
+#SBATCH --nodelist=chimera24
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --ntasks=4
 #SBATCH --gres=gpu:1
-#SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --mem=80gb
+#SBATCH --time=3-23:59:00
+#SBATCH --requeue
 #SBATCH --array=0-7
 #SBATCH --output=/hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/motion-similarity/experiments/slurm_%A_%a.log
 #SBATCH --error=/hpcstor6/scratch01/p/p.bendiksen001/virtual_reality/motion-similarity/experiments/slurm_%A_%a.err
@@ -63,15 +68,16 @@ echo "========================================"
 
 # ---------------------------------------------------------------------------
 # Activate conda environment
+# torch_gpu_cu12 — CUDA 12.1 build, tested on chimera24 H200
 # ---------------------------------------------------------------------------
-source /home/p.bendiksen001/miniconda3/etc/profile.d/conda.sh
-conda activate torch_gpu
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate torch_gpu_cu12
 
 # Sanity checks
-echo "Python        : $(which python)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+echo "Python        : $(python -V)"
 echo "Torch version : $(python -c 'import torch; print(torch.__version__)')"
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
-echo "GPU name      : $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none")')"
 
 # ---------------------------------------------------------------------------
 # Run the experiment (train + infer)
