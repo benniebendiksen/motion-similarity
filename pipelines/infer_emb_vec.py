@@ -1093,7 +1093,7 @@ def main_with_refinement():
         try:
             # Try to load embedding-based similarity data first
             embedding_similarity_dict = load_similarity_data_from_embeddings(
-                bool_drop=True, anim_name=anim_name, config=config, embedding_dir="../datasets/lma_perform_walking_encoded", combination_method="rots_only", force_regenerate=True)["train"]
+                bool_drop=True, anim_name=anim_name, config=config, embedding_dir="../datasets/lma_perform_walking_ae_paired", combination_method="rots_only", force_regenerate=True)["train"]
 
             # Filter by valid_indices if evaluating only validation set
             if evaluate_only_validation:
@@ -1474,7 +1474,7 @@ def main_without_refinement():
                     bool_drop=True,
                     anim_name=anim_name,
                     config=config,
-                    embedding_dir="../datasets/lma_perform_picking_encoded",
+                    embedding_dir="../datasets/lma_perform_picking_ae_paired",
                     combination_method="rots_only",
                     force_regenerate=True
                 )["train"]
@@ -1484,7 +1484,7 @@ def main_without_refinement():
                     bool_drop=True,
                     anim_name=anim_name,
                     config=config,
-                    embedding_dir="../datasets/lma_perform_pointing_encoded",
+                    embedding_dir="../datasets/lma_perform_pointing_ae_paired",
                     combination_method="rots_only",
                     force_regenerate=True
                 )["train"]
@@ -1494,7 +1494,7 @@ def main_without_refinement():
                     bool_drop=True,
                     anim_name=anim_name,
                     config=config,
-                    embedding_dir="../datasets/lma_perform_walking_encoded",
+                    embedding_dir="../datasets/lma_perform_walking_ae_paired",
                     combination_method="rots_only",
                     force_regenerate=True
                 )["train"]

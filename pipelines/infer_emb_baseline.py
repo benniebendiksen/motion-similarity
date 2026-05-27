@@ -387,11 +387,11 @@ def main():
 
         # 2) Load AE embeddings via SingleEmbeddingDataset from *_encoded_2 dirs
         if anim == "walking":
-            emb_dir = "../datasets/lma_perform_walking_encoded_2"
+            emb_dir = "../datasets/lma_perform_walking_ae_combined"
         elif anim == "pointing":
-            emb_dir = "../datasets/lma_perform_pointing_encoded_2"
+            emb_dir = "../datasets/lma_perform_pointing_ae_combined"
         elif anim == "picking":
-            emb_dir = "../datasets/lma_perform_picking_encoded_2"
+            emb_dir = "../datasets/lma_perform_picking_ae_combined"
         else:
             raise ValueError(f"Unknown animation {anim}")
 

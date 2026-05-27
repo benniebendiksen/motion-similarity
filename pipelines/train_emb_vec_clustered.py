@@ -382,13 +382,13 @@ def main():
     
     # Embedding directories
     parser.add_argument('--walking-dir', type=str, 
-                       default='../datasets/lma_perform_walking_encoded',
+                       default='../datasets/lma_perform_walking_ae_paired',
                        help='Directory for walking embeddings')
     parser.add_argument('--pointing-dir', type=str,
-                       default='../datasets/lma_perform_pointing_encoded',
+                       default='../datasets/lma_perform_pointing_ae_paired',
                        help='Directory for pointing embeddings')
     parser.add_argument('--picking-dir', type=str,
-                       default='../datasets/lma_perform_picking_encoded',
+                       default='../datasets/lma_perform_picking_ae_paired',
                        help='Directory for picking embeddings')
     
     # Embedding configuration

@@ -101,7 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--animation', type=str, default='walking', choices=['walking', 'pointing', 'picking'],
                         help='Which animation type to train on')
     parser.add_argument('--task-index', type=str, help='Task index for distributed training')
-    parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_encoded',
+    parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_ae_paired',
                         help='Directory containing embedding files (_root.pt / _rots.pt pairs)')
     parser.add_argument('--combination-method', type=str, default='concat',
                         choices=['concat', 'weighted', 'root_only', 'rots_only'],

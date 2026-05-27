@@ -9,7 +9,7 @@ This script:
 4. Runs the triplet training using embeddings as input
 
 Usage:
-    python run_embedding_triplet_training.py --embedding-dir ../datasets/lma_perform_encoded
+    python run_embedding_triplet_training.py --embedding-dir ../datasets/lma_perform_walking_ae_paired
 """
 
 import os
@@ -329,11 +329,11 @@ def main():
     parser = argparse.ArgumentParser(description='Run embedding-based triplet training')
 
     # Required arguments
-    parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_encoded',
+    parser.add_argument('--embedding-dir', type=str, default='../datasets/lma_perform_walking_ae_paired',
                         help='Directory containing embedding files (.pt files)')
-    parser.add_argument('--embedding-dir-2', type=str, default='../datasets/lma_perform_pointing_encoded',
+    parser.add_argument('--embedding-dir-2', type=str, default='../datasets/lma_perform_pointing_ae_paired',
                         help='Directory for second animation embeddings (pointing)')
-    parser.add_argument('--embedding-dir-3', type=str, default='../datasets/lma_perform_picking_encoded',
+    parser.add_argument('--embedding-dir-3', type=str, default='../datasets/lma_perform_picking_ae_paired',
                         help='Directory for second animation embeddings (pointing)')
     # Optional arguments
     parser.add_argument('--combination-method', type=str, default='rots_only',
