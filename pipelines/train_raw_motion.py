@@ -35,7 +35,15 @@ except ImportError:
 
 
 def check_gpu_access():
-    # Check if GPUs are available
+    if not _TF_AVAILABLE:
+        # Fall back to PyTorch GPU check when TensorFlow is not installed.
+        import torch
+        if torch.cuda.is_available():
+            print(f"✅ PyTorch CUDA available: {torch.cuda.get_device_name(0)}")
+        else:
+            print("❌ No GPU detected by PyTorch (TensorFlow not installed).")
+        return
+    # Check if GPUs are available via TensorFlow
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         print(f"✅ TensorFlow detected {len(gpus)} GPU(s):")
