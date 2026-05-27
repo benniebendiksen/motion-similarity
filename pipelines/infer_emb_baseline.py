@@ -136,12 +136,17 @@ def render_module_report(
     print(f"\n→ Stronger method (this section): {winner}\n")
 
     # Machine-readable lines matched by parse_inference_output() regexes
+    _right_token = method_name_right.split("(")[0].strip().lower()  # "geodesic" or "dtw"
+    _winner_token = "Embedding_L2" if winner == method_name_left else f"Raw_Features_{_right_token}"
     if corr_left:
-        _right_token = method_name_right.split("(")[0].strip().lower()  # "geodesic" or "dtw"
-        _winner_token = "Embedding_L2" if winner == method_name_left else f"Raw_Features_{_right_token}"
         print(f"Embedding L2 distances - Pearson: r={corr_left['pearson']['r']:.4f}, p={corr_left['pearson']['p']:.4f}")
         print(f"Embedding L2 distances - Spearman: r={corr_left['spearman']['r']:.4f}, p={corr_left['spearman']['p']:.4f}")
         print(f"Embedding L2 - slope: {corr_left['linreg']['slope']:.4f}, intercept: {corr_left['linreg']['intercept']:.4f}, R²: {corr_left['linreg']['r2']:.4f}")
+    if corr_right:
+        print(f"Raw feature {_right_token} distances - Pearson: r={corr_right['pearson']['r']:.4f}, p={corr_right['pearson']['p']:.4f}")
+        print(f"Raw feature {_right_token} distances - Spearman: r={corr_right['spearman']['r']:.4f}, p={corr_right['spearman']['p']:.4f}")
+        print(f"Raw Feature {_right_token} - slope: {corr_right['linreg']['slope']:.4f}, intercept: {corr_right['linreg']['intercept']:.4f}, R²: {corr_right['linreg']['r2']:.4f}")
+    if corr_left:
         print(f"Overall, the {_winner_token} method shows a stronger relationship between distances and inverse comparison values")
 
 

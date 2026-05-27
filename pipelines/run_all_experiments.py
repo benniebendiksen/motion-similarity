@@ -213,34 +213,37 @@ _RE_SECTION = re.compile(
     r"(?P<anim>[A-Z]+)\s+\((?P<subset>[^)]+)\):\s*EMBEDDING L2 VS RAW FEATURE (?P<metric>GEODESIC|DTW) DISTANCE\n"
     r"={30,}",
 )
-_RE_PEARSON  = re.compile(r"Embedding L2 distances\s+-\s+Pearson:\s+r=(?P<r>-?\d+\.\d+)")
-_RE_SPEARMAN = re.compile(r"Embedding L2 distances\s+-\s+Spearman:\s+r=(?P<r>-?\d+\.\d+)")
-_RE_R2       = re.compile(r"Embedding L2\s+-\s+slope:.*?R²:\s*(?P<r2>-?\d+\.\d+)")
-_RE_WINNER   = re.compile(r"Overall,\s+the\s+(?P<winner>\S+)\s+method\s+shows")
+_RE_PEARSON      = re.compile(r"Embedding L2 distances\s+-\s+Pearson:\s+r=(?P<r>-?\d+\.\d+)")
+_RE_SPEARMAN     = re.compile(r"Embedding L2 distances\s+-\s+Spearman:\s+r=(?P<r>-?\d+\.\d+)")
+_RE_R2           = re.compile(r"Embedding L2\s+-\s+slope:.*?R²:\s*(?P<r2>-?\d+\.\d+)")
+_RE_RAW_PEARSON  = re.compile(r"Raw feature \w+ distances\s+-\s+Pearson:\s+r=(?P<r>-?\d+\.\d+)")
+_RE_RAW_SPEARMAN = re.compile(r"Raw feature \w+ distances\s+-\s+Spearman:\s+r=(?P<r>-?\d+\.\d+)")
+_RE_RAW_R2       = re.compile(r"Raw Feature \w+\s+-\s+slope:.*?R²:\s*(?P<r2>-?\d+\.\d+)")
+_RE_WINNER       = re.compile(r"Overall,\s+the\s+(?P<winner>\S+)\s+method\s+shows")
 
 
 def parse_inference_output(text: str) -> Dict:
     """
     Parse the structured text produced by any of the infer_*.py scripts.
 
-    Returns a dict keyed by (animation, metric_type) → metric values, e.g.
+    Returns a dict keyed by animation → distance_type → metric values, e.g.
     {
       "walking": {
-        "geodesic": {"emb_pearson": 0.47, "emb_spearman": 0.43, "emb_r2": 0.22, "winner": "Embedding_L2"},
-        "dtw":      {...},
+        "geodesic": {
+          "emb_pearson": 0.47, "emb_spearman": 0.43, "emb_r2": 0.22,
+          "raw_pearson": 0.38, "raw_spearman": 0.35, "raw_r2": 0.14,
+          "winner": "Embedding_L2"
+        },
+        "dtw": {...},
       },
       ...
     }
     """
     results: Dict = {}
 
-    # Split the text on section headers
+    # split() with groups returns [before, g1, g2, g3, after_block, g1, ...]
     parts = _RE_SECTION.split(text)
-    # parts = [preamble, anim1, subset1, metric1, block1, anim2, ...]
-    # groups are: anim, subset, metric, then the text block follows
-    # Actually split() with groups gives: [before, g1, g2, g3, after, g1, g2, g3, after ...]
 
-    # Walk through 4-tuples after the preamble
     idx = 1  # skip preamble
     while idx + 3 <= len(parts):
         anim   = parts[idx].lower()
@@ -249,16 +252,22 @@ def parse_inference_output(text: str) -> Dict:
         block  = parts[idx + 3]
         idx += 4
 
-        m_p = _RE_PEARSON.search(block)
-        m_s = _RE_SPEARMAN.search(block)
-        m_r = _RE_R2.search(block)
-        m_w = _RE_WINNER.search(block)
+        m_p  = _RE_PEARSON.search(block)
+        m_s  = _RE_SPEARMAN.search(block)
+        m_r  = _RE_R2.search(block)
+        m_rp = _RE_RAW_PEARSON.search(block)
+        m_rs = _RE_RAW_SPEARMAN.search(block)
+        m_rr = _RE_RAW_R2.search(block)
+        m_w  = _RE_WINNER.search(block)
 
         entry = {
-            "emb_pearson":  float(m_p.group("r"))  if m_p else None,
-            "emb_spearman": float(m_s.group("r"))  if m_s else None,
-            "emb_r2":       float(m_r.group("r2")) if m_r else None,
-            "winner":       m_w.group("winner")    if m_w else None,
+            "emb_pearson":  float(m_p.group("r"))   if m_p  else None,
+            "emb_spearman": float(m_s.group("r"))   if m_s  else None,
+            "emb_r2":       float(m_r.group("r2"))  if m_r  else None,
+            "raw_pearson":  float(m_rp.group("r"))  if m_rp else None,
+            "raw_spearman": float(m_rs.group("r"))  if m_rs else None,
+            "raw_r2":       float(m_rr.group("r2")) if m_rr else None,
+            "winner":       m_w.group("winner")     if m_w  else None,
         }
 
         results.setdefault(anim, {})[metric] = entry
@@ -388,11 +397,10 @@ def run_experiment(exp: Dict, skip_training: bool = False) -> Dict:
 
 def print_comparison_table(all_results: List[Dict]) -> None:
     """
-    Print a side-by-side table of Embedding-L2 Pearson / Spearman / R²
-    for each (experiment × animation × distance_metric) combination.
-    Also delegates to compare_results.py if it exists.
+    Print a side-by-side table comparing Embedding-L2 vs raw-feature (Geodesic/DTW)
+    Pearson, Spearman, and R² for each (experiment × animation × distance_metric).
+    A ">" marker flags rows where the embedding outperforms the raw baseline on Pearson.
     """
-    # Collect animation names and metric types from all results
     anim_set:   set = set()
     metric_set: set = set()
     for r in all_results:
@@ -401,37 +409,39 @@ def print_comparison_table(all_results: List[Dict]) -> None:
             metric_set.update(mdict.keys())
 
     anims   = sorted(anim_set)
-    metrics = sorted(metric_set)   # e.g. ["dtw", "geodesic"]
+    metrics = sorted(metric_set)
+
+    def fmt(v):
+        return f"{v:.4f}" if v is not None else "  n/a"
 
     for anim in anims:
         for dist_metric in metrics:
-            header = f"\n  {anim.upper()}  ·  Embedding L2 vs {dist_metric.upper()}"
-            print(header)
-            print("  " + "─" * (len(header) - 2))
-
-            col_w = 20
-            header_row = (
+            print(f"\n  {anim.upper()}  ·  Embedding L2  vs  {dist_metric.upper()}")
+            print(f"  {'─'*100}")
+            print(
                 f"  {'Experiment':<28}"
-                f"{'Pearson r':>{col_w}}"
-                f"{'Spearman r':>{col_w}}"
-                f"{'R²':>{col_w}}"
-                f"{'Winner':>{col_w}}"
+                f"  {'Emb-Pearson':>11}  {'Raw-Pearson':>11}"
+                f"  {'Emb-Spearman':>12}  {'Raw-Spearman':>12}"
+                f"  {'Emb-R²':>7}  {'Raw-R²':>7}"
+                f"  {'Emb>Raw?':>8}"
             )
-            print(header_row)
-            print("  " + "─" * (len(header_row) - 2))
+            print(f"  {'─'*100}")
 
             for r in all_results:
                 entry = r.get("metrics", {}).get(anim, {}).get(dist_metric)
                 if entry is None:
                     continue
-                def fmt(v):
-                    return f"{v:.4f}" if v is not None else "  n/a "
+                ep = entry.get("emb_pearson")
+                rp = entry.get("raw_pearson")
+                beats = ""
+                if ep is not None and rp is not None:
+                    beats = "YES" if ep > rp else "no"
                 print(
                     f"  {r['experiment']:<28}"
-                    f"{fmt(entry.get('emb_pearson')):>{col_w}}"
-                    f"{fmt(entry.get('emb_spearman')):>{col_w}}"
-                    f"{fmt(entry.get('emb_r2')):>{col_w}}"
-                    f"{(entry.get('winner') or ''):>{col_w}}"
+                    f"  {fmt(ep):>11}  {fmt(rp):>11}"
+                    f"  {fmt(entry.get('emb_spearman')):>12}  {fmt(entry.get('raw_spearman')):>12}"
+                    f"  {fmt(entry.get('emb_r2')):>7}  {fmt(entry.get('raw_r2')):>7}"
+                    f"  {beats:>8}"
                 )
 
 
@@ -441,16 +451,22 @@ def save_comparison_csv(all_results: List[Dict]) -> None:
     for r in all_results:
         for anim, mdict in r.get("metrics", {}).items():
             for dist_metric, entry in mdict.items():
+                ep = entry.get("emb_pearson")
+                rp = entry.get("raw_pearson")
                 rows.append({
-                    "experiment":   r["experiment"],
-                    "description":  r["description"],
-                    "checkpoint":   r.get("checkpoint", ""),
-                    "animation":    anim,
+                    "experiment":    r["experiment"],
+                    "description":   r["description"],
+                    "checkpoint":    r.get("checkpoint", ""),
+                    "animation":     anim,
                     "distance_type": dist_metric,
-                    "emb_pearson":  entry.get("emb_pearson"),
-                    "emb_spearman": entry.get("emb_spearman"),
-                    "emb_r2":       entry.get("emb_r2"),
-                    "winner":       entry.get("winner"),
+                    "emb_pearson":   ep,
+                    "emb_spearman":  entry.get("emb_spearman"),
+                    "emb_r2":        entry.get("emb_r2"),
+                    "raw_pearson":   rp,
+                    "raw_spearman":  entry.get("raw_spearman"),
+                    "raw_r2":        entry.get("raw_r2"),
+                    "emb_beats_raw": (ep > rp) if (ep is not None and rp is not None) else None,
+                    "winner":        entry.get("winner"),
                 })
     if not rows:
         print("  No metrics to write to CSV.")
