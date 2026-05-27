@@ -1070,6 +1070,10 @@ def main_with_refinement():
             config,
             valid_indices=valid_indices
         )
+        if learned_neutrals and anim_name in learned_neutrals:
+            neutral = torch.tensor(learned_neutrals[anim_name], dtype=torch.float32)
+            triplet_module.neutral_embedding = neutral
+            triplet_module.bool_fixed_neutral_embedding = True
         all_triplet_modules.append(triplet_module)  # Store for overall analysis
 
         # PART 2: Load embedding data and generate refined embeddings
@@ -1682,4 +1686,5 @@ def main_without_refinement():
     print(f"{'=' * 70}")
 
 if __name__ == "__main__":
-    main_with_refinement()
+    # main_with_refinement()
+    main_without_refinement()

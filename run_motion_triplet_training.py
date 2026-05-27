@@ -260,8 +260,8 @@ if __name__ == '__main__':
     # Architecture variant is either from task index or default
     arch_variant = int(config.num_task) if config.num_task else 0
 
-    bool_drop_neutral_exemplar = True
-    bool_fixed_neutral_embedding = True
+    bool_drop_neutral_exemplar = False
+    bool_fixed_neutral_embedding = False
     squared_left_right_euc_dist = False
     squared_class_neut_euc_dist = False
 

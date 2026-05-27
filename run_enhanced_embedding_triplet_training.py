@@ -401,7 +401,7 @@ def main():
                        help='Strategy for selecting neutral from clusters')
     
     # Training configuration
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=100,
                        help='Number of training epochs')
     parser.add_argument('--scheduler', type=str, default='plateau',
                        choices=['plateau', 'cosine', 'step'],

@@ -23,7 +23,7 @@ class Config:
         self.similarity_exemplar_dim = (137, 112)
         self.embedding_refinement_model_output_size = 512
         # self.n_similarity_epochs = 201
-        self.n_similarity_epochs = 50
+        self.n_similarity_epochs = 100
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'
@@ -57,6 +57,13 @@ class Config:
         # Set paths based on environment
         self._set_paths()
 
+        # Allow the experiment runner (or any caller) to override the checkpoint
+        # directory via an environment variable without touching Config source.
+        # Takes priority over everything else.
+        _env_chk = os.environ.get("MOTION_CHECKPOINT_DIR")
+        if _env_chk:
+            self.checkpoint_root_dir = _env_chk.rstrip("/") + "/"
+
         # Dictionary file names
         self.efforts_labels_dict_file_name = 'labels_dict.pickle'
 
@@ -87,6 +94,13 @@ class Config:
         else:
             # Use local paths
             self.__dict__.update(self._base_local_paths)
+            # When a task_index (experiment name) is supplied locally, isolate
+            # checkpoints in a dedicated subdirectory — mirrors remote behaviour.
+            if self.num_task is not None:
+                self.checkpoint_root_dir = os.path.join(
+                    self._base_local_paths["checkpoint_root_dir"],
+                    str(self.num_task)
+                ) + "/"
 
     def ensure_directories_exist(self) -> None:
         """Ensure all required directories exist"""

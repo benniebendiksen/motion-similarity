@@ -816,8 +816,8 @@ def main():
     squared_class_neut_euc_dist = False
 
     # Animation types to process
-    # animations = ["walking", "pointing", "picking"]
-    animations = ["walking"]
+    animations = ["walking", "pointing", "picking"]
+    # animations = ["walking"]
 
     # Create containers for aggregated results
     all_embeddings = {}

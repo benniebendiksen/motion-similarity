@@ -336,14 +336,14 @@ def main():
     parser.add_argument('--combination-method', type=str, default='rots_only',
                         choices=['concat', 'weighted', 'root_only', 'rots_only'],
                         help='How to combine root and rotation embeddings')
-    parser.add_argument('--use-perception-loss', action='store_true', default=False,
+    parser.add_argument('--use-perception-loss', default=False,
                         help='Use enhanced perception-aligned loss')
-    parser.add_argument('--use-adaptive-distance', action='store_true', default=False,
+    parser.add_argument('--use-adaptive-distance', default=False,
                         help='Use adaptive distance module')
     parser.add_argument('--scheduler', type=str, default='plateau',
                         choices=['plateau', 'cosine', 'step'],
                         help='Learning rate scheduler')
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='Number of training epochs')
     parser.add_argument('--test-loading', action='store_true',
                         help='Only test loading embeddings without training')
