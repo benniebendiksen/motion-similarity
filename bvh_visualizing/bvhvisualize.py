@@ -1,7 +1,9 @@
 # bvhvisualizer.py, Aline Normoyle, 2024
 
 import matplotlib
-matplotlib.use('MacOSX')
+import sys as _sys
+# MacOSX backend only exists on macOS; use a headless backend everywhere else.
+matplotlib.use('MacOSX' if _sys.platform == 'darwin' else 'Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np

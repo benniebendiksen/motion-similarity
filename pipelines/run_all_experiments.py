@@ -133,9 +133,9 @@ EXPERIMENTS: List[Dict] = [
         "train_script": "train_emb_vec_clustered.py",
         "train_flags": [
             "--combination-method", "rots_only",
-            "--embedding-dir",   str(_DATASETS / "lma_perform_walking_ae_paired"),
-            "--embedding-dir-2", str(_DATASETS / "lma_perform_pointing_ae_paired"),
-            "--embedding-dir-3", str(_DATASETS / "lma_perform_picking_ae_paired"),
+            "--walking-dir", str(_DATASETS / "lma_perform_walking_ae_paired"),
+            "--pointing-dir", str(_DATASETS / "lma_perform_pointing_ae_paired"),
+            "--picking-dir",  str(_DATASETS / "lma_perform_picking_ae_paired"),
         ],
         "infer_script": "infer_emb_vec.py",
         "network_class": "EmbeddingRefiningSimilarityNetwork",

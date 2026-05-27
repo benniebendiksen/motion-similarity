@@ -44,8 +44,13 @@ except ImportError:
 from Config import Config
 import src.organize_synthetic_data as osd
 
-# New: our single-embedding dataset loader
-from embedding_dataset_single import SingleEmbeddingDataset
+# AE embedding dataset loader — uses paired _root.pt / _rots.pt files.
+from embedding_dataset import EmbeddingDataset
+
+# Resolve the datasets directory the same way run_all_experiments.py does so
+# the script works on both local macOS and chimera without hardcoded paths.
+from pathlib import Path as _Path
+_DATASETS = _Path(_root).parent / "datasets"
 
 # New: Triplet ground truth module (provides df_comparisons with human judgements)
 from networks.triplet_mining import TripletMining
@@ -219,7 +224,7 @@ def get_raw_features_without_dataloader(anim_name, config, valid_indices=None, b
         if not exemplars:
             continue
         x = exemplars[0]
-        if isinstance(x, tf.Tensor):
+        if _TF_AVAILABLE and isinstance(x, tf.Tensor):
             x = x.numpy()
         elif not isinstance(x, np.ndarray):
             x = np.array(x)
@@ -385,19 +390,14 @@ def main():
         subset_name = "VALIDATION SUBSET" if evaluate_only_validation else "ALL DATA"
         print(f"Evaluating on: {subset_name}")
 
-        # 2) Load AE embeddings via SingleEmbeddingDataset from *_encoded_2 dirs
-        if anim == "walking":
-            emb_dir = "../datasets/lma_perform_walking_ae_combined"
-        elif anim == "pointing":
-            emb_dir = "../datasets/lma_perform_pointing_ae_combined"
-        elif anim == "picking":
-            emb_dir = "../datasets/lma_perform_picking_ae_combined"
-        else:
-            raise ValueError(f"Unknown animation {anim}")
+        # 2) Load AE embeddings via EmbeddingDataset from ae_paired dirs.
+        #    _DATASETS is resolved relative to this file so the path works on
+        #    both local macOS and chimera without hardcoded prefixes.
+        emb_dir = str(_DATASETS / f"lma_perform_{anim}_ae_paired")
 
         try:
-            ds = SingleEmbeddingDataset(emb_dir)     # filters invalid effort tuples, parses filenames
-            emb_sim_dict = ds.to_similarity_dict()   # {effort_tuple: [np_embedding, ...]}
+            ds = EmbeddingDataset(emb_dir)
+            emb_sim_dict = ds.create_similarity_dict(combination_method='rots_only')
         except Exception as e:
             print(f"[{anim}] ERROR building embedding similarity dict from {emb_dir}: {e}")
             continue

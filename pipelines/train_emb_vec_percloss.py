@@ -17,7 +17,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 _root = os.path.dirname(_here)
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, 'networks'))
-from networks.similarity_network import SimilarityNetwork
+from networks.similarity_network import SimilarityNetwork, EmbeddingRefiningSimilarityNetwork
 from networks.triplet_mining import TripletMining
 from Config import Config
 
@@ -214,12 +214,11 @@ if __name__ == '__main__':
     print(f"Created {len(train_triplet_modules)} triplet mining modules")
 
     # Create the similarity network.
-    # NOTE: SimilarityNetwork.__init__ calls build_model() which builds a CNN
-    # suitable for 2-D (frames × features) raw-motion inputs.  Because this
-    # pipeline feeds flat 1-D AE embedding vectors we must immediately swap
-    # the backbone to the MLP variant by calling build_embedding_model().
+    # EmbeddingRefiningSimilarityNetwork builds the MLP backbone directly for
+    # flat 1-D AE embedding vectors; SimilarityNetwork would try to build a CNN
+    # and fail when exemplar_dim is 1-D.
     print("Creating similarity network (embedding-input variant)...")
-    similarity_network = SimilarityNetwork(
+    similarity_network = EmbeddingRefiningSimilarityNetwork(
         train_loader=train_loader,
         validation_loader=val_loader,
         test_loader=val_loader,
@@ -232,8 +231,6 @@ if __name__ == '__main__':
         use_perception_loss=args.use_perception_loss,
         use_adaptive_distance=args.use_adaptive_distance
     )
-    # Swap CNN backbone → MLP backbone for flat embedding vectors.
-    similarity_network.build_embedding_model()
 
     # Print final training configuration
     print("\n=== Final Training Configuration ===")

@@ -177,8 +177,8 @@ class SimilarityNetworkV0(nn.Module):
         x = self.bn3(x)
         x = self.pool2(x)
 
-        # Flatten
-        x = x.view(-1, self.fc_input_size)
+        # Flatten — use reshape instead of view to handle non-contiguous tensors
+        x = x.reshape(-1, self.fc_input_size)
 
         # Final dense layer
         x = self.fc(x)
