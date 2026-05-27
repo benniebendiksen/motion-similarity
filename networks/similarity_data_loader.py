@@ -1,9 +1,18 @@
-import keras
 import torch
 import numpy as np
 
 
-class SimilarityDataLoader(keras.utils.Sequence):
+class _SequenceBase:
+    """
+    Minimal drop-in for keras.utils.Sequence — no Keras/TF dependency required.
+    Provides the same interface contract: __len__, __getitem__, on_epoch_end.
+    """
+    def __len__(self): raise NotImplementedError
+    def __getitem__(self, idx): raise NotImplementedError
+    def on_epoch_end(self): pass
+
+
+class SimilarityDataLoader(_SequenceBase):
     def __init__(self, list_similarity_dicts, config, shuffle=False, valid_indices=None):
         """
         self.dict_similarity_exemplars, the data structure that represents our dataset, gets
