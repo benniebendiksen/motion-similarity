@@ -1227,7 +1227,7 @@ def main_with_refinement():
         # Print final analysis results
         print("\n" + "=" * 70)
 
-        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED AND REFINED EMBEDDINGS VS GEODESIC DTW DISTANCE")
+        print(f"{anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE GEODESIC DISTANCE")
         print("=" * 70 + "\n")
         print(comparison_results['output_text'])
 
@@ -1255,7 +1255,7 @@ def main_with_refinement():
         )
         # Print final analysis results
         print("\n" + "=" * 70)
-        print(f"{anim_name.upper()} ({subset_name}): PRETRAINED AND REFINED EMBEDDINGS VS RAW FEATURE DTW DISTANCE")
+        print(f"{anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE DTW DISTANCE")
         print("=" * 70 + "\n")
         print(comparison_results_dtw['output_text'])
 

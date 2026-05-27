@@ -103,7 +103,9 @@ def render_module_report(
     valid_pairs_left: int,
     valid_pairs_right: int,
 ) -> None:
-    print(_h(f"{anim_name.upper()} ({subset_name}) — {method_name_left} vs {method_name_right}"))
+    # Header in the format expected by parse_inference_output() in run_all_experiments.py
+    _metric_label = method_name_right.split("(")[0].strip().upper()   # "Geodesic" → "GEODESIC"
+    print(_h(f"{anim_name.upper()} ({subset_name}): EMBEDDING L2 VS RAW FEATURE {_metric_label} DISTANCE"))
 
     print("[CORRELATIONS vs human judgements]")
     if corr_left:
@@ -132,6 +134,15 @@ def render_module_report(
 
     winner = _winner_by_strength(corr_left, corr_right, method_name_left, method_name_right)
     print(f"\n→ Stronger method (this section): {winner}\n")
+
+    # Machine-readable lines matched by parse_inference_output() regexes
+    if corr_left:
+        _right_token = method_name_right.split("(")[0].strip().lower()  # "geodesic" or "dtw"
+        _winner_token = "Embedding_L2" if winner == method_name_left else f"Raw_Features_{_right_token}"
+        print(f"Embedding L2 distances - Pearson: r={corr_left['pearson']['r']:.4f}, p={corr_left['pearson']['p']:.4f}")
+        print(f"Embedding L2 distances - Spearman: r={corr_left['spearman']['r']:.4f}, p={corr_left['spearman']['p']:.4f}")
+        print(f"Embedding L2 - slope: {corr_left['linreg']['slope']:.4f}, intercept: {corr_left['linreg']['intercept']:.4f}, R²: {corr_left['linreg']['r2']:.4f}")
+        print(f"Overall, the {_winner_token} method shows a stronger relationship between distances and inverse comparison values")
 
 
 # -----------------------
