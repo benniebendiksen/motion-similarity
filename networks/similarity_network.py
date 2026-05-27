@@ -260,6 +260,14 @@ class SimilarityNetwork:
         # Build the model
         self.build_model()
 
+        # TripletMining is not an nn.Module, so PyTorch won't auto-migrate its
+        # tensor state when the network is moved to GPU.  Do it explicitly here
+        # so alpha matrices, bool masks, and the neutral embedding live on the
+        # same device as the network outputs during loss computation.
+        all_triplet_modules = list(self.train_triplet_modules) + list(self.val_triplet_modules)
+        for module in all_triplet_modules:
+            module.to(self.device)
+
     def build_model(self):
         print("Building similarity network model...")
         input_shape = (self.exemplar_dim[0], self.exemplar_dim[1])
@@ -1456,6 +1464,12 @@ class EmbeddingRefiningSimilarityNetwork:
 
         # Build embedding-specific model
         self.build_embedding_model()
+
+        # Same device migration as SimilarityNetwork — TripletMining is not an
+        # nn.Module so its CPU-initialised tensors must be moved to GPU manually.
+        all_triplet_modules = list(self.train_triplet_modules) + list(self.val_triplet_modules)
+        for module in all_triplet_modules:
+            module.to(self.device)
 
     def build_embedding_model(self):
         """Build simplified model for embedding inputs - matches CNN architecture."""

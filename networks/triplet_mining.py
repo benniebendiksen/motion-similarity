@@ -158,6 +158,21 @@ class TripletMining:
         self.subset_global_dict()
         self.pre_process_comparisons_data(anim_name)
 
+    def to(self, device):
+        """
+        Move all tensor state to *device*, mirroring nn.Module.to() semantics.
+
+        TripletMining is not an nn.Module, so PyTorch won't do this automatically.
+        The caller (SimilarityNetwork / EmbeddingRefiningSimilarityNetwork) must
+        invoke this after the model is moved to GPU so that alpha matrices,
+        bool masks, and the neutral embedding live on the same device as the
+        network outputs during loss computation.
+        """
+        for attr_name, val in list(vars(self).items()):
+            if isinstance(val, torch.Tensor):
+                setattr(self, attr_name, val.to(device))
+        return self
+
     def subset_global_dict(self):
         """
         Subsets the global dictionary of similarity classes based on data in the comparisons DataFrame.
