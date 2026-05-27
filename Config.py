@@ -76,11 +76,25 @@ class Config:
         }
 
     def _set_paths(self) -> None:
-        """Set paths based on whether we're running locally or remotely"""
-        if self.is_remote:
+        """Set paths based on whether we're running locally or remotely.
+
+        Remote mode is activated by either:
+          - passing a task_index argument  (legacy distributed training), OR
+          - setting the MOTION_IS_REMOTE=1 env var  (used by the SLURM
+            experiment runner so data-directory paths resolve on chimera
+            even when task_index is not provided).
+        """
+        _env_remote = os.environ.get("MOTION_IS_REMOTE", "").strip() in ("1", "true", "True")
+        if self.is_remote or _env_remote:
             # Update paths for remote execution
-            self.checkpoint_root_dir = os.path.join(self._remote_machine_paths['checkpoint_root_dir'],
-                                                    f"{self.num_task}/")
+            if self.is_remote and self.num_task is not None:
+                self.checkpoint_root_dir = os.path.join(
+                    self._remote_machine_paths['checkpoint_root_dir'],
+                    f"{self.num_task}/"
+                )
+            else:
+                # Orchestrated run: MOTION_CHECKPOINT_DIR will override this.
+                self.checkpoint_root_dir = self._remote_machine_paths['checkpoint_root_dir']
             # not used for sim network
             self.all_bvh_dir = self._remote_machine_paths['all_bvh_dir']
             self.bvh_files_dir_walking = self._remote_machine_paths['bvh_files_dir_walking']

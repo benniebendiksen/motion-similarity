@@ -84,6 +84,11 @@ echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available()
 # ---------------------------------------------------------------------------
 cd "${PROJECT_ROOT}"
 
+# Tell Config to use remote (chimera) data-directory paths even when no
+# --task-index flag is passed.  MOTION_CHECKPOINT_DIR is set per-experiment
+# by run_all_experiments.py; MOTION_IS_REMOTE handles the BVH / exemplar dirs.
+export MOTION_IS_REMOTE=1
+
 python pipelines/run_all_experiments.py \
     --only "${EXP_NAME}" \
     2>&1 | tee "${LOG_DIR}/run.log"
