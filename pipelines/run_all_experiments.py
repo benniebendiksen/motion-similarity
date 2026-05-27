@@ -140,18 +140,18 @@ EXPERIMENTS: List[Dict] = [
         "infer_script": "infer_emb_vec.py",
         "network_class": "EmbeddingRefiningSimilarityNetwork",
     },
-    # ── 7. AE embedding vectors → MLP via full SimilarityNetwork trainer ──
+    # ── 7. AE embedding vectors → MLP via EmbeddingRefiningSimilarityNetwork, perception loss ──
     {
         "name": "emb_vec_percloss",
-        "description": "AE emb → MLP (SimilarityNetwork trainer)  |  perception loss",
+        "description": "AE emb → MLP (EmbeddingRefiningSimilarityNetwork)  |  perception loss",
         "train_script": "train_emb_vec_percloss.py",
         "train_flags": [
             "--animation", "walking",
             "--use-perception-loss",
             "--embedding-dir", str(_DATASETS / "lma_perform_walking_ae_paired"),
         ],
-        "infer_script": "infer_emb_vec_percloss.py",
-        "network_class": "SimilarityNetwork_BestCorr",
+        "infer_script": "infer_emb_vec.py",
+        "network_class": "EmbeddingRefiningSimilarityNetwork",
     },
     # ── 8. Baseline: raw AE distances, no triplet fine-tuning ────────────
     {

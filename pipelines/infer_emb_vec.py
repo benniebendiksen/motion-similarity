@@ -49,6 +49,7 @@ from pathlib import Path
 # whether invoked from pipelines/ or from the project root.
 _here = os.path.dirname(os.path.abspath(__file__))
 _root = os.path.dirname(_here)
+_DATASETS = Path(_root).parent / "datasets"   # ../datasets — works on Mac and chimera
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, 'networks'))
 # Import required modules
@@ -1093,7 +1094,9 @@ def main_with_refinement():
         try:
             # Try to load embedding-based similarity data first
             embedding_similarity_dict = load_similarity_data_from_embeddings(
-                bool_drop=True, anim_name=anim_name, config=config, embedding_dir="../datasets/lma_perform_walking_ae_paired", combination_method="rots_only", force_regenerate=True)["train"]
+                bool_drop=True, anim_name=anim_name, config=config,
+                embedding_dir=str(_DATASETS / f"lma_perform_{anim_name}_ae_paired"),
+                combination_method="rots_only", force_regenerate=True)["train"]
 
             # Filter by valid_indices if evaluating only validation set
             if evaluate_only_validation:
@@ -1468,33 +1471,14 @@ def main_without_refinement():
         print("-" * 50)
 
         try:
-            if anim_name == "picking":
-                # Load embedding-based similarity data
+            if anim_name in ("picking", "pointing", "walking"):
+                # Load embedding-based similarity data — use absolute path so this
+                # works whether the script is run from Mac or the chimera cluster.
                 embedding_similarity_dict = load_similarity_data_from_embeddings(
                     bool_drop=True,
                     anim_name=anim_name,
                     config=config,
-                    embedding_dir="../datasets/lma_perform_picking_ae_paired",
-                    combination_method="rots_only",
-                    force_regenerate=True
-                )["train"]
-
-            elif anim_name == "pointing":
-                embedding_similarity_dict = load_similarity_data_from_embeddings(
-                    bool_drop=True,
-                    anim_name=anim_name,
-                    config=config,
-                    embedding_dir="../datasets/lma_perform_pointing_ae_paired",
-                    combination_method="rots_only",
-                    force_regenerate=True
-                )["train"]
-
-            elif anim_name == "walking":
-                embedding_similarity_dict = load_similarity_data_from_embeddings(
-                    bool_drop=True,
-                    anim_name=anim_name,
-                    config=config,
-                    embedding_dir="../datasets/lma_perform_walking_ae_paired",
+                    embedding_dir=str(_DATASETS / f"lma_perform_{anim_name}_ae_paired"),
                     combination_method="rots_only",
                     force_regenerate=True
                 )["train"]
@@ -1694,5 +1678,10 @@ def main_without_refinement():
     print(f"{'=' * 70}")
 
 if __name__ == "__main__":
-    # main_with_refinement()
-    main_without_refinement()
+    # When run by run_all_experiments.py the orchestrator sets MOTION_CHECKPOINT_FILE
+    # to point at the trained model.  Use the full refinement path in that case.
+    # Standalone invocations (no env var) fall back to the baseline AE-only analysis.
+    if os.environ.get("MOTION_CHECKPOINT_FILE"):
+        main_with_refinement()
+    else:
+        main_without_refinement()
