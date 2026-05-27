@@ -221,17 +221,18 @@ class Batches:
 
     def convert_exemplar_np_arrays_to_tensors(self):
         """
-        Convert exemplar NumPy arrays to TensorFlow tensors.
-
-        Returns:
-            None
+        Formerly converted NumPy exemplars to TensorFlow tensors before pickling.
+        Now a no-op that keeps exemplars as NumPy arrays so pickle files are
+        TF-free and loadable without tensorflow installed.
         """
         for state_drive, inner_list in self.dict_similarity_exemplars.items():
-            # NOTE: tf.convert_to_tensor removed (TF not required); this method is
-            # not called by any active PyTorch pipeline.
             self.dict_similarity_exemplars[state_drive] = list(inner_list)
-        print(f"converted {len(self.dict_similarity_exemplars[(0, -1, -1, 0)])} similarity exemplars, per class, to type: "
-              f"{type(self.dict_similarity_exemplars[(0, -1, -1, 0)][0])}")
+        # Log the type of the first exemplar in the first available key
+        first_key = next(iter(self.dict_similarity_exemplars), None)
+        if first_key is not None and self.dict_similarity_exemplars[first_key]:
+            ex = self.dict_similarity_exemplars[first_key][0]
+            print(f"Exemplars kept as {type(ex).__name__} (TF conversion removed); "
+                  f"classes: {len(self.dict_similarity_exemplars)}")
 
     def append_similarity_class_exemplar(self, state_drive, exemplar):
         """
