@@ -26,7 +26,12 @@ from scipy import stats
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from dtaidistance import dtw_ndim
-import tensorflow as tf
+# TensorFlow is optional — only used for the GPU availability check helper.
+try:
+    import tensorflow as tf
+    _TF_AVAILABLE = True
+except ImportError:
+    _TF_AVAILABLE = False
 import torch
 import pickle
 import time

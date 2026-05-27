@@ -26,7 +26,12 @@ from networks.similarity_data_loader import SimilarityDataLoader
 from networks.triplet_mining import TripletMining
 from Config import Config
 import src.organize_synthetic_data as osd
-import tensorflow as tf
+# TensorFlow is optional — only used for the GPU availability check helper.
+try:
+    import tensorflow as tf
+    _TF_AVAILABLE = True
+except ImportError:
+    _TF_AVAILABLE = False
 
 
 def check_gpu_access():

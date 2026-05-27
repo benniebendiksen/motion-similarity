@@ -33,7 +33,12 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
 # Optional: TF appears in your raw pickles
-import tensorflow as tf  # ok if installed; otherwise you can comment and gate its use
+# TensorFlow is optional — only used for the GPU availability check helper.
+try:
+    import tensorflow as tf
+    _TF_AVAILABLE = True
+except ImportError:
+    _TF_AVAILABLE = False
 
 # --- Project-specific imports (REQUIRED) ---
 from Config import Config
