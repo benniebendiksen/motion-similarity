@@ -555,7 +555,7 @@ def generate_embeddings_from_dataloader(model, data_loader, similarity_dict, ani
             if len(batch_features.shape) == 3:
                 batch_features = batch_features.unsqueeze(-1)
 
-            batch_features = batch_features.to(torch.float32)
+            batch_features = batch_features.to(torch.float32).to(next(model.parameters()).device)
             print(f"batch_features.shape: {batch_features.shape}")
             batch_embeddings = model(batch_features).cpu().numpy()
             print(f"batch_embeddings.shape: {batch_embeddings.shape}")
