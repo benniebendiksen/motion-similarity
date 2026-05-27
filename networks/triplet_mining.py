@@ -246,7 +246,8 @@ class TripletMining:
                 # This effectively removes the neutral anchor from the loss computation
                 self.tensor_dists_class_neut = torch.zeros(modified_embeddings.shape[0],
                                                            dtype=torch.float32,
-                                                           requires_grad=False)
+                                                           requires_grad=False,
+                                                           device=modified_embeddings.device)
 
                 return left_right_distances
             else:
