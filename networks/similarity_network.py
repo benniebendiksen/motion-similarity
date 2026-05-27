@@ -4,7 +4,16 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, StepLR
 import networks.custom_losses as custom_losses
-from keras import callbacks
+# Keras is optional — only used for the TrainingLogger callback base class.
+try:
+    from keras import callbacks as _keras_callbacks
+    _KerasCallbackBase = _keras_callbacks.Callback
+except ImportError:
+    class _KerasCallbackBase:
+        """Stub Callback base used when keras is not installed."""
+        def __init__(self): pass
+        def on_epoch_begin(self, epoch, logs=None): pass
+        def on_epoch_end(self, epoch, logs=None): pass
 import logging
 import os
 import time
@@ -51,7 +60,7 @@ def set_seed(seed=42):
     print(f"Random seed set to {seed} for deterministic behavior")
 
 
-class TrainingLogger(callbacks.Callback):
+class TrainingLogger(_KerasCallbackBase):
     def __init__(self, model_name):
         super().__init__()
         self.start_time = None

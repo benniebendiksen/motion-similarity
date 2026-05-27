@@ -1,5 +1,4 @@
 import numpy as np
-import tensorflow as tf
 import pickle
 import math
 
@@ -228,8 +227,9 @@ class Batches:
             None
         """
         for state_drive, inner_list in self.dict_similarity_exemplars.items():
-            self.dict_similarity_exemplars[state_drive] = [tf.convert_to_tensor(exemplar, dtype=tf.float32) for
-                                                           exemplar in inner_list]
+            # NOTE: tf.convert_to_tensor removed (TF not required); this method is
+            # not called by any active PyTorch pipeline.
+            self.dict_similarity_exemplars[state_drive] = list(inner_list)
         print(f"converted {len(self.dict_similarity_exemplars[(0, -1, -1, 0)])} similarity exemplars, per class, to type: "
               f"{type(self.dict_similarity_exemplars[(0, -1, -1, 0)][0])}")
 

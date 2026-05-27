@@ -4,7 +4,6 @@ static module for organizing triplet mining data as well as performing online tr
 from pathlib import Path
 
 import numpy as np
-import tensorflow as tf
 import torch
 import pandas as pd
 import ast

@@ -1,6 +1,5 @@
 from Config import BATCH_STRATEGY
 from Config import BatchStrategy
-import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

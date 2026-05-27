@@ -4,7 +4,12 @@ static module for organizing synthetic motion data in the context of both effort
 import sys
 
 import torch
-import tensorflow as tf
+# TensorFlow is optional — only used for isinstance checks on legacy TF tensors.
+try:
+    import tensorflow as tf
+    _TF_AVAILABLE = True
+except ImportError:
+    _TF_AVAILABLE = False
 from src.batches import Batches
 from pymo.parsers import BVHParser
 from pymo.viz_tools import *
@@ -470,14 +475,14 @@ def load_similarity_data(bool_drop_neutral_exemplar, anim_name, config, train_va
             exemplar = exemplars[0]
             # print(f"  First exemplar type: {type(exemplar)}")
 
-            if isinstance(exemplar, (torch.Tensor, np.ndarray, tf.Tensor)):
+            if isinstance(exemplar, (torch.Tensor, np.ndarray) + ((tf.Tensor,) if _TF_AVAILABLE else ())):
                 if isinstance(exemplar, torch.Tensor):
                     shape = exemplar.shape
                     dtype = exemplar.dtype
                 elif isinstance(exemplar, np.ndarray):
                     shape = exemplar.shape
                     dtype = exemplar.dtype
-                elif isinstance(exemplar, tf.Tensor):
+                elif _TF_AVAILABLE and isinstance(exemplar, tf.Tensor):
                     shape = exemplar.shape
                     dtype = exemplar.dtype
                 # print(f"  First exemplar shape: {shape}")
@@ -593,14 +598,14 @@ def load_similarity_data(bool_drop_neutral_exemplar, anim_name, config, train_va
 #             exemplar = exemplars[0]
 #             # print(f"  First exemplar type: {type(exemplar)}")
 #
-#             if isinstance(exemplar, (torch.Tensor, np.ndarray, tf.Tensor)):
+#             if isinstance(exemplar, (torch.Tensor, np.ndarray) + ((tf.Tensor,) if _TF_AVAILABLE else ())):
 #                 if isinstance(exemplar, torch.Tensor):
 #                     shape = exemplar.shape
 #                     dtype = exemplar.dtype
 #                 elif isinstance(exemplar, np.ndarray):
 #                     shape = exemplar.shape
 #                     dtype = exemplar.dtype
-#                 elif isinstance(exemplar, tf.Tensor):
+#                 elif _TF_AVAILABLE and isinstance(exemplar, tf.Tensor):
 #                     shape = exemplar.shape
 #                     dtype = exemplar.dtype
 #                 # print(f"  First exemplar shape: {shape}")
