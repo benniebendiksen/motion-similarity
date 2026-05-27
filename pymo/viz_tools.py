@@ -1,7 +1,11 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import IPython
+try:
+    import IPython
+    _IPYTHON_AVAILABLE = True
+except ImportError:
+    _IPYTHON_AVAILABLE = False
 import os
 
 def save_fig(fig_id, tight_layout=True):
@@ -186,7 +190,8 @@ def nb_play_mocap_fromurl(mocap, mf, frame_time=1/30, scale=1, base_url='http://
     url = '%s/mocapplayer/player.html?data_url=%s&scale=%f&cz=200&order=xzyi&frame_time=%f'%(base_url, filepath, scale, frame_time)
     iframe = '<iframe src=' + url + ' width="100%" height=500></iframe>'
     link = '<a href=%s target="_blank">New Window</a>'%url
-    return IPython.display.HTML(iframe+link)
+    if _IPYTHON_AVAILABLE:
+        return IPython.display.HTML(iframe+link)
 
 def nb_play_mocap(mocap, mf, meta=None, frame_time=1/30, scale=1, camera_z=500, base_url=None):
     data_template = 'var dataBuffer = `$$DATA$$`;'
@@ -233,4 +238,5 @@ def nb_play_mocap(mocap, mf, meta=None, frame_time=1/30, scale=1, camera_z=500, 
     url = '%s?&cz=200&order=xzyi&frame_time=%f&scale=%f'%(base_url, frame_time, scale)
     iframe = '<iframe frameborder="0" src=' + url + ' width="100%" height=500></iframe>'
     link = '<a href=%s target="_blank">New Window</a>'%url
-    return IPython.display.HTML(iframe+link)
+    if _IPYTHON_AVAILABLE:
+        return IPython.display.HTML(iframe+link)
