@@ -1550,6 +1550,7 @@ class EmbeddingRefiningSimilarityNetwork:
         """Run the simplified training loop - matches original CNN training."""
         best_val_loss = float('inf')
         best_train_loss = float('inf')
+        self._best_model_state = None   # tracks best-val-loss state for final checkpoint
         validation_frequency = 1  # Validate every epoch like original
 
         print(f"Starting training for {self.config.n_similarity_epochs} epochs...")
@@ -1632,6 +1633,8 @@ class EmbeddingRefiningSimilarityNetwork:
                 if val_epoch_loss < best_val_loss:
                     best_val_loss = val_epoch_loss
                     best_train_loss = epoch_loss
+                    import copy
+                    self._best_model_state = copy.deepcopy(self.network.state_dict())
                     self.save_checkpoint(epoch + 1)
                     print(f"New best model! Val Loss: {val_epoch_loss:.4f}")
 
@@ -1643,7 +1646,13 @@ class EmbeddingRefiningSimilarityNetwork:
         print("Training complete!")
 
     def save_checkpoint(self, epoch, is_final=False):
-        """Save model checkpoint."""
+        """Save model checkpoint.
+
+        When is_final=True, saves the best-validation-loss state seen during
+        training (tracked in self._best_model_state), NOT the final-epoch state.
+        This ensures the committed 0_final_embedding_model.pt is the best model,
+        not the last (potentially overfit) one.
+        """
         import os
 
         if is_final:
@@ -1651,14 +1660,20 @@ class EmbeddingRefiningSimilarityNetwork:
                 self.checkpoint_dir,
                 f"{self.architecture_variant}_final_embedding_model.pt"
             )
+            state_dict = (
+                self._best_model_state
+                if getattr(self, '_best_model_state', None) is not None
+                else self.network.state_dict()
+            )
         else:
             checkpoint_path = os.path.join(
                 self.checkpoint_dir,
                 f"{self.architecture_variant}_embedding_model_epoch_{epoch:03d}.pt"
             )
+            state_dict = self.network.state_dict()
 
         torch.save({
-            'model_state_dict': self.network.state_dict(),
+            'model_state_dict': state_dict,
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
             'epoch': epoch,
