@@ -28,6 +28,9 @@ class Config:
         # Counters only increment when val loss is strictly worse than the current best,
         # so a sustained val loss of 0 does not trigger early stopping.
         self.early_stopping_patience = 15
+        # Re-cluster output-space neutrals every N epochs in EmbeddingRefiningSimilarityNetwork.
+        # Set to None to disable periodic re-clustering (only clusters once before training).
+        self.neutral_update_frequency = 10
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'

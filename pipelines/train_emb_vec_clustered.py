@@ -246,13 +246,12 @@ class EnhancedEmbeddingTrainer:
         modules = []
         
         for i, anim_name in enumerate(animation_names):
-            # bool_fixed=False: neutral is extracted dynamically from embeddings[0] each
-            # forward pass (the live network output), keeping it in the same output space
-            # as all other embeddings. The neutral exemplar is guaranteed to be first in
-            # the dict/batch by setup_clustering_based_training above.
+            # bool_fixed=True: neutral_embedding will be replaced with the output-space
+            # k-means centroid by EmbeddingRefiningSimilarityNetwork.update_output_space_neutrals()
+            # before the first training step. The AE-space centroid set here is a placeholder only.
             module = TripletMining(
                 bool_drop=False,
-                bool_fixed=False,
+                bool_fixed=True,
                 squared_left_right=False,
                 squared_class_neut=False,
                 anim_name=anim_name,
@@ -261,7 +260,14 @@ class EnhancedEmbeddingTrainer:
                 exclude_neutral_completely=False,
                 preloaded_dict=self.animation_dicts.get(anim_name)
             )
-            logger.info(f"Created dynamic-neutral module for {anim_name} ({'training' if is_training else 'validation'})")
+
+            if anim_name in self.learned_neutrals:
+                neutral = self.learned_neutrals[anim_name]
+                if not isinstance(neutral, torch.Tensor):
+                    neutral = torch.tensor(neutral, dtype=torch.float32)
+                module.neutral_embedding = neutral
+
+            logger.info(f"Created module for {anim_name} ({'training' if is_training else 'validation'}) — output-space neutral will be set before training")
             
             modules.append(module)
         

@@ -1562,6 +1562,70 @@ class EmbeddingRefiningSimilarityNetwork:
 
         print("Model initialization complete - ready for training")
 
+    def update_output_space_neutrals(self, neutral_update_frequency=None, current_epoch=None):
+        """
+        Re-cluster training embeddings in post-network output space and update every
+        TripletMining module's neutral_embedding with the resulting centroid.
+
+        The k-means neutral was originally computed in AE input space.  After passing
+        through a non-linear MLP, mean(network(x_i)) ≠ network(mean(x_i)), so that
+        centroid is geometrically wrong for distance calculations in output space.
+        This method corrects that by clustering the *current* network outputs.
+
+        Called once before training begins (epoch=0) and then every
+        neutral_update_frequency epochs if that argument is provided.
+        """
+        if neutral_update_frequency is not None and current_epoch is not None:
+            if current_epoch > 0 and current_epoch % neutral_update_frequency != 0:
+                return
+
+        import copy
+        from sklearn.cluster import KMeans
+
+        self.network.eval()
+        all_modules = list(self.train_triplet_modules) + list(self.val_triplet_modules)
+
+        with torch.no_grad():
+            # Collect all training outputs in one pass
+            for inputs, _ in self.train_loader:
+                inputs = inputs.to(self.device)
+                if len(inputs.shape) == 3:
+                    inputs = inputs.squeeze(-1)
+                outputs = self.network(inputs)  # (N, embed_dim)
+                outputs_np = outputs.cpu().numpy()
+                break  # single batch covers all training classes
+
+        # One k-means fit per animation module (modules share the same animation type
+        # by position: train[0]/val[0] = walking, [1] = pointing, [2] = picking).
+        n_train = len(self.train_triplet_modules)
+        for i, train_module in enumerate(self.train_triplet_modules):
+            start = self.train_loader.module_start_indices[i]
+            size  = self.train_loader.module_sizes[i]
+            module_outputs = outputs_np[start:start + size]
+
+            if len(module_outputs) < 2:
+                continue
+
+            n_clusters = min(5, len(module_outputs))
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            kmeans.fit(module_outputs)
+
+            # Use the centroid of the most-central cluster (closest to global mean)
+            global_mean = module_outputs.mean(axis=0)
+            distances_to_mean = ((kmeans.cluster_centers_ - global_mean) ** 2).sum(axis=1)
+            best_center = kmeans.cluster_centers_[distances_to_mean.argmin()]
+
+            neutral = torch.tensor(best_center, dtype=torch.float32).to(self.device)
+
+            # Update both train and val modules for this animation
+            train_module.neutral_embedding = neutral
+            train_module.bool_fixed_neutral_embedding = True
+            if i < len(self.val_triplet_modules):
+                self.val_triplet_modules[i].neutral_embedding = copy.deepcopy(neutral)
+                self.val_triplet_modules[i].bool_fixed_neutral_embedding = True
+
+        print(f"  Updated output-space neutrals for {n_train} animation modules.")
+
     def run_model_training(self):
         """Run the simplified training loop - matches original CNN training."""
         best_val_loss = float('inf')
@@ -1570,10 +1634,23 @@ class EmbeddingRefiningSimilarityNetwork:
         epochs_no_improve = 0
         patience = getattr(self.config, 'early_stopping_patience', 15)
         validation_frequency = 1  # Validate every epoch like original
+        neutral_update_frequency = getattr(self.config, 'neutral_update_frequency', 10)
 
         print(f"Starting training for {self.config.n_similarity_epochs} epochs...")
 
+        # Cluster in post-network output space before any training so the neutral
+        # lives in the same vector space as all other embeddings from the start.
+        if hasattr(self, 'train_triplet_modules') and any(
+            not m.bool_fixed_neutral_embedding for m in self.train_triplet_modules
+        ):
+            print("Initialising output-space neutrals before training...")
+            self.update_output_space_neutrals()
+
         for epoch in range(self.config.n_similarity_epochs):
+            # Periodically re-cluster in output space so the neutral tracks the
+            # evolving embedding geometry as network weights change.
+            self.update_output_space_neutrals(neutral_update_frequency, epoch)
+
             # Training phase
             self.network.train()
             running_loss = 0.0
