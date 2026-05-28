@@ -24,6 +24,10 @@ class Config:
         self.embedding_refinement_model_output_size = 512
         # self.n_similarity_epochs = 201
         self.n_similarity_epochs = 100
+        # Stop training if val loss has not improved (strictly) for this many epochs.
+        # Counters only increment when val loss is strictly worse than the current best,
+        # so a sustained val loss of 0 does not trigger early stopping.
+        self.early_stopping_patience = 15
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'

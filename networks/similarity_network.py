@@ -706,6 +706,10 @@ class SimilarityNetwork:
         best_val_loss = float('inf')
         best_train_loss = float('inf')
         best_correlation = -1.0
+        self._best_model_state = None
+        self._best_epoch = 0
+        epochs_no_improve = 0
+        patience = getattr(self.config, 'early_stopping_patience', 15)
         validation_frequency = 1  # Validate every N epochs
 
         for epoch in range(self.config.n_similarity_epochs):
@@ -822,8 +826,17 @@ class SimilarityNetwork:
                 if val_epoch_loss < best_val_loss:
                     best_val_loss = val_epoch_loss
                     best_train_loss = train_epoch_loss
+                    self._best_epoch = epoch + 1
+                    import copy
+                    self._best_model_state = copy.deepcopy(self.network.state_dict())
+                    epochs_no_improve = 0
                     self.save_checkpoint(epoch + 1, val_correlation, val_r2)
                     print(f"New best model by loss! Val Loss: {val_epoch_loss:.4f}")
+                elif val_epoch_loss > best_val_loss:
+                    epochs_no_improve += 1
+                    if epochs_no_improve >= patience:
+                        print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} consecutive epochs).")
+                        break
 
                 # Save separate checkpoint if best correlation (only if using perception loss)
                 if self.use_perception_loss and val_correlation > best_correlation:
@@ -854,7 +867,10 @@ class SimilarityNetwork:
             if (epoch + 1) % 10 == 0:
                 self.plot_training_history(os.path.join(self.checkpoint_dir, f"training_history_epoch_{epoch + 1}.png"))
 
-        # Save final model
+        # Restore best-val-loss weights before saving the authoritative final checkpoint.
+        # This ensures find_best_checkpoint() loads the best state regardless of epoch.
+        if self._best_model_state is not None:
+            self.network.load_state_dict(self._best_model_state)
         self.save_checkpoint(self.config.n_similarity_epochs)
 
         # Generate final training history plot
@@ -1551,6 +1567,8 @@ class EmbeddingRefiningSimilarityNetwork:
         best_val_loss = float('inf')
         best_train_loss = float('inf')
         self._best_model_state = None   # tracks best-val-loss state for final checkpoint
+        epochs_no_improve = 0
+        patience = getattr(self.config, 'early_stopping_patience', 15)
         validation_frequency = 1  # Validate every epoch like original
 
         print(f"Starting training for {self.config.n_similarity_epochs} epochs...")
@@ -1635,8 +1653,14 @@ class EmbeddingRefiningSimilarityNetwork:
                     best_train_loss = epoch_loss
                     import copy
                     self._best_model_state = copy.deepcopy(self.network.state_dict())
+                    epochs_no_improve = 0
                     self.save_checkpoint(epoch + 1)
                     print(f"New best model! Val Loss: {val_epoch_loss:.4f}")
+                elif val_epoch_loss > best_val_loss:
+                    epochs_no_improve += 1
+                    if epochs_no_improve >= patience:
+                        print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} consecutive epochs).")
+                        break
 
                 # Print summary
                 print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")
