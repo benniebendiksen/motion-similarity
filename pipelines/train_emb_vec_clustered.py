@@ -119,16 +119,20 @@ class EnhancedEmbeddingTrainer:
         neutral_save_path = Path(self.config.checkpoint_root_dir) / "learned_neutrals.pkl"
         self.neutral_learner.save_neutrals(neutral_save_path)
         
-        # Replace existing neutral exemplars with learned ones
+        # Replace existing neutral exemplars with learned ones.
+        # The neutral must be first in the dict so that EmbeddingSimilarityDataLoader
+        # places it at position 0 in the batch — required for dynamic neutral extraction
+        # (bool_fixed=False), which passes embeddings[0] as the neutral rather than a
+        # stale pre-network centroid. Using the live network output for the neutral keeps
+        # class-neutral distances in the same output space as all other embeddings.
         for anim_name, neutral_rep in self.learned_neutrals.items():
             if anim_name in animation_dicts:
-                # Remove old neutral if it exists
-                if (0, 0, 0, 0) in animation_dicts[anim_name]:
-                    del animation_dicts[anim_name][(0, 0, 0, 0)]
-                
-                # Add learned neutral as the neutral exemplar
-                animation_dicts[anim_name][(0, 0, 0, 0)] = [neutral_rep]
-                logger.info(f"Replaced {anim_name} neutral with learned representation")
+                old_dict = animation_dicts[anim_name]
+                # Rebuild dict with neutral first, then all non-neutral entries
+                new_dict = {(0, 0, 0, 0): [neutral_rep]}
+                new_dict.update({k: v for k, v in old_dict.items() if k != (0, 0, 0, 0)})
+                animation_dicts[anim_name] = new_dict
+                logger.info(f"Replaced {anim_name} neutral with learned representation (placed first)")
         
         # Create train/validation split
         train_indices, val_indices = self._create_stratified_split(
@@ -242,29 +246,22 @@ class EnhancedEmbeddingTrainer:
         modules = []
         
         for i, anim_name in enumerate(animation_names):
-            # Create module with appropriate settings
+            # bool_fixed=False: neutral is extracted dynamically from embeddings[0] each
+            # forward pass (the live network output), keeping it in the same output space
+            # as all other embeddings. The neutral exemplar is guaranteed to be first in
+            # the dict/batch by setup_clustering_based_training above.
             module = TripletMining(
-                bool_drop=False,  # Don't drop neutral, we'll use learned one
-                bool_fixed=True,  # Fix the neutral representation
+                bool_drop=False,
+                bool_fixed=False,
                 squared_left_right=False,
                 squared_class_neut=False,
                 anim_name=anim_name,
                 config=self.config,
                 valid_indices=indices[i],
-                exclude_neutral_completely=False,  # Use neutral in training
+                exclude_neutral_completely=False,
                 preloaded_dict=self.animation_dicts.get(anim_name)
             )
-            
-            # Set the learned neutral representation
-            if anim_name in self.learned_neutrals:
-                neutral = self.learned_neutrals[anim_name]
-                if not isinstance(neutral, torch.Tensor):
-                    neutral = torch.tensor(neutral, dtype=torch.float32)
-                
-                module.neutral_embedding = neutral
-                module.bool_fixed_neutral_embedding = True
-                
-                logger.info(f"Set learned neutral for {anim_name} ({'training' if is_training else 'validation'})")
+            logger.info(f"Created dynamic-neutral module for {anim_name} ({'training' if is_training else 'validation'})")
             
             modules.append(module)
         

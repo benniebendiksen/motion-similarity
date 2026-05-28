@@ -89,30 +89,37 @@ def _infer_combination_method(checkpoint_path):
     return 'rots_only'
 
 
-def create_train_val_split(similarity_dicts, val_ratio=0.4):
+def create_train_val_split(similarity_dicts, val_ratio=0.4, seed=42):
     """
-    Create deterministic training and validation indices for each animation type.
+    Create training and validation indices for each animation type.
+
+    Keys are shuffled with a fixed seed before splitting so that human-comparison
+    pairs are distributed randomly across splits. A sorted-order split concentrated
+    all negative-weight effort tuples in the validation slice; since comparisons
+    rarely pair two same-sign classes, nearly every pair straddled the boundary,
+    leaving zero valid triplets in the validation loss.
 
     Args:
         similarity_dicts: List of dictionaries containing class exemplars for each animation
         val_ratio: Ratio of classes to use for validation
+        seed: Random seed for reproducible shuffling
 
     Returns:
         train_indices: List of sets containing training class indices for each animation
         val_indices: List of sets containing validation class indices for each animation
     """
+    import random
+    rng = random.Random(seed)
 
     train_indices = []
     val_indices = []
 
     for anim_dict in similarity_dicts:
-        # Get keys except neutral and sort them for deterministic order
         keys = sorted(k for k in anim_dict.keys() if k != (0, 0, 0, 0))
+        rng.shuffle(keys)
 
-        # Determine validation set size
         val_size = max(1, int(len(keys) * val_ratio))
 
-        # Deterministic split based on sorted order
         val_keys = set(keys[:val_size])
         train_keys = set(keys[val_size:])
 
