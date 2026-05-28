@@ -57,6 +57,7 @@ _HERE = Path(__file__).resolve().parent          # pipelines/
 _ROOT = _HERE.parent                             # project root
 _DATASETS = _ROOT.parent / "datasets"            # ../datasets relative to project root
 _EXPERIMENTS_DIR = _ROOT / "experiments"
+_RESULTS_DIR = _HERE / "results"                 # pipelines/results/ — committed output
 _PYTHON = sys.executable                         # same interpreter that's running this script
 
 
@@ -473,7 +474,8 @@ def save_comparison_csv(all_results: List[Dict]) -> None:
         print("  No metrics to write to CSV.")
         return
 
-    csv_path = _EXPERIMENTS_DIR / "comparison.csv"
+    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    csv_path = _RESULTS_DIR / "comparison.csv"
     import csv
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))

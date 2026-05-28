@@ -29,6 +29,7 @@ from typing import Dict, List, Optional
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
 _EXPERIMENTS_DIR = _ROOT / "experiments"
+_RESULTS_DIR = _HERE / "results"                 # pipelines/results/ — committed output
 
 DIST_METRICS = ["geodesic", "dtw"]
 ANIMS_ORDER  = ["walking", "pointing", "picking"]
@@ -295,7 +296,8 @@ def main() -> None:
     winner_counts(results)
 
     if not args.no_csv:
-        export_csv(results, _EXPERIMENTS_DIR / "comparison.csv")
+        _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        export_csv(results, _RESULTS_DIR / "comparison.csv")
 
 
 if __name__ == "__main__":
