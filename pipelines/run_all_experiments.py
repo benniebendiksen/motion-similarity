@@ -395,79 +395,80 @@ def run_experiment(exp: Dict, skip_training: bool = False) -> Dict:
 # Comparison table
 # ---------------------------------------------------------------------------
 
+_ANIM_ORDER = ["walking", "pointing", "picking"]
+
+
+def _emb_geo_dtw(mdict: Dict):
+    """Extract (emb metrics, geodesic raw metrics, dtw raw metrics) from one animation dict."""
+    geo = mdict.get("geodesic", {})
+    dtw = mdict.get("dtw", {})
+    # emb metrics are identical in both distance-type entries; prefer geodesic
+    ep = geo.get("emb_pearson")  if geo.get("emb_pearson")  is not None else dtw.get("emb_pearson")
+    es = geo.get("emb_spearman") if geo.get("emb_spearman") is not None else dtw.get("emb_spearman")
+    er = geo.get("emb_r2")       if geo.get("emb_r2")       is not None else dtw.get("emb_r2")
+    return (
+        {"pearson": ep, "spearman": es, "r2": er},
+        {"pearson": geo.get("raw_pearson"), "spearman": geo.get("raw_spearman"), "r2": geo.get("raw_r2")},
+        {"pearson": dtw.get("raw_pearson"), "spearman": dtw.get("raw_spearman"), "r2": dtw.get("raw_r2")},
+    )
+
+
 def print_comparison_table(all_results: List[Dict]) -> None:
     """
-    Print a side-by-side table comparing Embedding-L2 vs raw-feature (Geodesic/DTW)
-    Pearson, Spearman, and R² for each (experiment × animation × distance_metric).
-    A ">" marker flags rows where the embedding outperforms the raw baseline on Pearson.
+    One section per animation; one row per experiment.
+    Columns: Emb-L2  |  Geodesic  |  DTW  (Pearson / Spearman / R² each).
     """
-    anim_set:   set = set()
-    metric_set: set = set()
-    for r in all_results:
-        for anim, mdict in r.get("metrics", {}).items():
-            anim_set.add(anim)
-            metric_set.update(mdict.keys())
-
-    anims   = sorted(anim_set)
-    metrics = sorted(metric_set)
-
     def fmt(v):
         return f"{v:.4f}" if v is not None else "  n/a"
 
-    for anim in anims:
-        for dist_metric in metrics:
-            print(f"\n  {anim.upper()}  ·  Embedding L2  vs  {dist_metric.upper()}")
-            print(f"  {'─'*100}")
-            print(
-                f"  {'Experiment':<28}"
-                f"  {'Emb-Pearson':>11}  {'Raw-Pearson':>11}"
-                f"  {'Emb-Spearman':>12}  {'Raw-Spearman':>12}"
-                f"  {'Emb-R²':>7}  {'Raw-R²':>7}"
-                f"  {'Emb>Raw?':>8}"
-            )
-            print(f"  {'─'*100}")
+    for anim in _ANIM_ORDER:
+        print(f"\n  {anim.upper()}  ·  Emb-L2 | Geodesic | DTW  (Pearson / Spearman / R²)")
+        print(f"  {'─'*110}")
+        print(
+            f"  {'Experiment':<28}"
+            f"  {'Emb-P':>7}  {'Emb-S':>7}  {'Emb-R²':>7}"
+            f"  │  {'Geo-P':>7}  {'Geo-S':>7}  {'Geo-R²':>7}"
+            f"  │  {'DTW-P':>7}  {'DTW-S':>7}  {'DTW-R²':>7}"
+        )
+        print(f"  {'─'*110}")
 
-            for r in all_results:
-                entry = r.get("metrics", {}).get(anim, {}).get(dist_metric)
-                if entry is None:
-                    continue
-                ep = entry.get("emb_pearson")
-                rp = entry.get("raw_pearson")
-                beats = ""
-                if ep is not None and rp is not None:
-                    beats = "YES" if ep > rp else "no"
-                print(
-                    f"  {r['experiment']:<28}"
-                    f"  {fmt(ep):>11}  {fmt(rp):>11}"
-                    f"  {fmt(entry.get('emb_spearman')):>12}  {fmt(entry.get('raw_spearman')):>12}"
-                    f"  {fmt(entry.get('emb_r2')):>7}  {fmt(entry.get('raw_r2')):>7}"
-                    f"  {beats:>8}"
-                )
+        for r in all_results:
+            mdict = r.get("metrics", {}).get(anim)
+            if mdict is None:
+                continue
+            emb, geo, dtw = _emb_geo_dtw(mdict)
+            print(
+                f"  {r['experiment']:<28}"
+                f"  {fmt(emb['pearson']):>7}  {fmt(emb['spearman']):>7}  {fmt(emb['r2']):>7}"
+                f"  │  {fmt(geo['pearson']):>7}  {fmt(geo['spearman']):>7}  {fmt(geo['r2']):>7}"
+                f"  │  {fmt(dtw['pearson']):>7}  {fmt(dtw['spearman']):>7}  {fmt(dtw['r2']):>7}"
+            )
 
 
 def save_comparison_csv(all_results: List[Dict]) -> None:
-    """Flatten all results into a tidy CSV at experiments/comparison.csv."""
+    """One row per (experiment × animation): emb, geodesic, and DTW as column groups."""
     rows = []
     for r in all_results:
-        for anim, mdict in r.get("metrics", {}).items():
-            for dist_metric, entry in mdict.items():
-                ep = entry.get("emb_pearson")
-                rp = entry.get("raw_pearson")
-                rows.append({
-                    "experiment":    r["experiment"],
-                    "description":   r["description"],
-                    "checkpoint":    r.get("checkpoint", ""),
-                    "animation":     anim,
-                    "distance_type": dist_metric,
-                    "emb_pearson":   ep,
-                    "emb_spearman":  entry.get("emb_spearman"),
-                    "emb_r2":        entry.get("emb_r2"),
-                    "raw_pearson":   rp,
-                    "raw_spearman":  entry.get("raw_spearman"),
-                    "raw_r2":        entry.get("raw_r2"),
-                    "emb_beats_raw": (ep > rp) if (ep is not None and rp is not None) else None,
-                    "winner":        entry.get("winner"),
-                })
+        for anim in _ANIM_ORDER:
+            mdict = r.get("metrics", {}).get(anim)
+            if mdict is None:
+                continue
+            emb, geo, dtw = _emb_geo_dtw(mdict)
+            rows.append({
+                "experiment":   r["experiment"],
+                "description":  r["description"],
+                "checkpoint":   r.get("checkpoint", ""),
+                "animation":    anim,
+                "emb_pearson":  emb["pearson"],
+                "emb_spearman": emb["spearman"],
+                "emb_r2":       emb["r2"],
+                "geo_pearson":  geo["pearson"],
+                "geo_spearman": geo["spearman"],
+                "geo_r2":       geo["r2"],
+                "dtw_pearson":  dtw["pearson"],
+                "dtw_spearman": dtw["spearman"],
+                "dtw_r2":       dtw["r2"],
+            })
     if not rows:
         print("  No metrics to write to CSV.")
         return

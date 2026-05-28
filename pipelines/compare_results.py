@@ -74,95 +74,106 @@ def _fmt(v: Optional[float], best: bool = False, second: bool = False) -> str:
     return s
 
 
+def _extract(mdict: Dict):
+    """Return (emb, geo, dtw) metric dicts from one animation's metrics block."""
+    geo = mdict.get("geodesic", {})
+    dtw = mdict.get("dtw", {})
+    # emb metrics are the same in both distance-type entries; prefer geodesic
+    ep = geo.get("emb_pearson")  if geo.get("emb_pearson")  is not None else dtw.get("emb_pearson")
+    es = geo.get("emb_spearman") if geo.get("emb_spearman") is not None else dtw.get("emb_spearman")
+    er = geo.get("emb_r2")       if geo.get("emb_r2")       is not None else dtw.get("emb_r2")
+    return (
+        {"pearson": ep, "spearman": es, "r2": er},
+        # geo/dtw raw metrics are invariant across experiments for a given animation
+        {"pearson": geo.get("raw_pearson"), "spearman": geo.get("raw_spearman"), "r2": geo.get("raw_r2")},
+        {"pearson": dtw.get("raw_pearson"), "spearman": dtw.get("raw_spearman"), "r2": dtw.get("raw_r2")},
+    )
+
+
 def ranked_table(
     results: List[Dict],
     anim_filter: Optional[str],
     sort_col: str,
 ) -> None:
-    """Print a ranked table for every (animation × distance_metric) slice."""
-
-    # Flatten into rows
+    """
+    One section per animation, one row per experiment.
+    Columns: Emb-L2 | Geodesic | DTW  (Pearson / Spearman / R² each).
+    Geodesic and DTW values are raw-motion baselines, invariant across experiments.
+    """
     rows = []
     for r in results:
-        for anim, mdict in r.get("metrics", {}).items():
+        for anim in ANIMS_ORDER:
+            mdict = r.get("metrics", {}).get(anim)
+            if mdict is None:
+                continue
             if anim_filter and anim != anim_filter.lower():
                 continue
-            for dist, entry in mdict.items():
-                rows.append({
-                    "exp":          r["experiment"],
-                    "anim":         anim,
-                    "dist":         dist,
-                    "pearson":      entry.get("emb_pearson"),
-                    "spearman":     entry.get("emb_spearman"),
-                    "r2":           entry.get("emb_r2"),
-                    "raw_pearson":  entry.get("raw_pearson"),
-                    "raw_spearman": entry.get("raw_spearman"),
-                    "raw_r2":       entry.get("raw_r2"),
-                    "winner":       entry.get("winner") or "",
-                })
+            emb, geo, dtw = _extract(mdict)
+            rows.append({
+                "exp":          r["experiment"],
+                "anim":         anim,
+                "emb_pearson":  emb["pearson"],
+                "emb_spearman": emb["spearman"],
+                "emb_r2":       emb["r2"],
+                "geo_pearson":  geo["pearson"],
+                "geo_spearman": geo["spearman"],
+                "geo_r2":       geo["r2"],
+                "dtw_pearson":  dtw["pearson"],
+                "dtw_spearman": dtw["spearman"],
+                "dtw_r2":       dtw["r2"],
+            })
 
     if not rows:
         print("  No data to display.")
         return
 
-    anims   = anim_filter.split(",") if anim_filter else ANIMS_ORDER
-    # include any anim that actually appears in data but isn't in ANIMS_ORDER
+    anims = [a for a in ANIMS_ORDER if a in {r["anim"] for r in rows}]
     extra_anims = sorted({r["anim"] for r in rows} - set(ANIMS_ORDER))
-    anims = [a for a in anims if a in {r["anim"] for r in rows}] + extra_anims
+    anims += extra_anims
 
-    sort_key = {"pearson": "pearson", "spearman": "spearman", "r2": "r2"}.get(sort_col, "pearson")
+    sort_key = {
+        "pearson":  "emb_pearson",
+        "spearman": "emb_spearman",
+        "r2":       "emb_r2",
+    }.get(sort_col, "emb_pearson")
 
     col_exp = 28
-    col_v   = 11
+    col_v   = 10
 
     for anim in anims:
-        for dist in DIST_METRICS:
-            subset = [r for r in rows if r["anim"] == anim and r["dist"] == dist]
-            if not subset:
-                continue
+        subset = [r for r in rows if r["anim"] == anim]
+        if not subset:
+            continue
 
-            # Sort descending by chosen metric (None → last)
-            subset.sort(key=lambda r: (r[sort_key] is None, -(r[sort_key] or 0)))
+        subset.sort(key=lambda r: (r[sort_key] is None, -(r[sort_key] or 0)))
 
-            # Mark best and second-best
-            valid_vals = [r[sort_key] for r in subset if r[sort_key] is not None]
-            best_val   = valid_vals[0] if valid_vals else None
-            second_val = valid_vals[1] if len(valid_vals) > 1 else None
+        valid_vals = [r[sort_key] for r in subset if r[sort_key] is not None]
+        best_val   = valid_vals[0] if valid_vals else None
+        second_val = valid_vals[1] if len(valid_vals) > 1 else None
 
-            title = f"\n  {anim.upper()}  ·  Embedding L2 vs {dist.upper()}"
-            print(title)
-            print("  " + "─" * 100)
-            hdr = (
-                f"  {'Experiment':<{col_exp}}"
-                f"{'Emb-Pear':>{col_v}}"
-                f"{'Raw-Pear':>{col_v}}"
-                f"{'Emb-Spear':>{col_v}}"
-                f"{'Raw-Spear':>{col_v}}"
-                f"{'Emb-R²':>{col_v}}"
-                f"{'Raw-R²':>{col_v}}"
-                f"{'Beats?':>8}"
+        print(f"\n  {anim.upper()}  ·  Emb-L2  |  Geodesic (raw)  |  DTW (raw)")
+        print("  " + "─" * 110)
+        print(
+            f"  {'Experiment':<{col_exp}}"
+            f"  {'Emb-P':>{col_v}}  {'Emb-S':>{col_v}}  {'Emb-R²':>{col_v}}"
+            f"  │  {'Geo-P':>{col_v}}  {'Geo-S':>{col_v}}  {'Geo-R²':>{col_v}}"
+            f"  │  {'DTW-P':>{col_v}}  {'DTW-S':>{col_v}}  {'DTW-R²':>{col_v}}"
+        )
+        print("  " + "─" * 110)
+
+        for r in subset:
+            v = r[sort_key]
+            is_best   = (v is not None and v == best_val)
+            is_second = (v is not None and v == second_val and not is_best)
+            line = (
+                f"  {r['exp']:<{col_exp}}"
+                f"  {_fmt(r['emb_pearson'],  is_best and sort_key=='emb_pearson',  is_second and sort_key=='emb_pearson'):>{col_v}}"
+                f"  {_fmt(r['emb_spearman'], is_best and sort_key=='emb_spearman', is_second and sort_key=='emb_spearman'):>{col_v}}"
+                f"  {_fmt(r['emb_r2'],       is_best and sort_key=='emb_r2',       is_second and sort_key=='emb_r2'):>{col_v}}"
+                f"  │  {_fmt(r['geo_pearson']):>{col_v}}  {_fmt(r['geo_spearman']):>{col_v}}  {_fmt(r['geo_r2']):>{col_v}}"
+                f"  │  {_fmt(r['dtw_pearson']):>{col_v}}  {_fmt(r['dtw_spearman']):>{col_v}}  {_fmt(r['dtw_r2']):>{col_v}}"
             )
-            print(hdr)
-            print("  " + "─" * 100)
-
-            for r in subset:
-                v = r[sort_key]
-                is_best   = (v is not None and v == best_val)
-                is_second = (v is not None and v == second_val and not is_best)
-                ep = r["pearson"]
-                rp = r["raw_pearson"]
-                beats = ("YES" if ep > rp else "no") if (ep is not None and rp is not None) else ""
-                line = (
-                    f"  {r['exp']:<{col_exp}}"
-                    f"{_fmt(r['pearson'],  is_best and sort_key=='pearson',  is_second and sort_key=='pearson'):>{col_v}}"
-                    f"{_fmt(r['raw_pearson']):>{col_v}}"
-                    f"{_fmt(r['spearman'], is_best and sort_key=='spearman', is_second and sort_key=='spearman'):>{col_v}}"
-                    f"{_fmt(r['raw_spearman']):>{col_v}}"
-                    f"{_fmt(r['r2'],       is_best and sort_key=='r2',       is_second and sort_key=='r2'):>{col_v}}"
-                    f"{_fmt(r['raw_r2']):>{col_v}}"
-                    f"{beats:>8}"
-                )
-                print(line)
+            print(line)
 
 
 # ---------------------------------------------------------------------------
@@ -170,29 +181,36 @@ def ranked_table(
 # ---------------------------------------------------------------------------
 
 def winner_counts(results: List[Dict]) -> None:
-    """Print how many times each experiment's embedding outperformed raw features."""
-    counts: Dict[str, int] = {}
-    totals: Dict[str, int] = {}
+    """
+    Count per animation how often embedding Pearson beats geodesic and DTW.
+    geo/dtw baselines are raw-motion constants, so totals = num animations with data.
+    """
+    geo_wins: Dict[str, int] = {}
+    dtw_wins: Dict[str, int] = {}
+    totals:   Dict[str, int] = {}
     for r in results:
         name = r["experiment"]
         for anim, mdict in r.get("metrics", {}).items():
-            for dist, entry in mdict.items():
-                totals[name] = totals.get(name, 0) + 1
-                if entry.get("winner", "").startswith("Embedding"):
-                    counts[name] = counts.get(name, 0) + 1
+            emb, geo, dtw = _extract(mdict)
+            totals[name] = totals.get(name, 0) + 1
+            if emb["pearson"] is not None and geo["pearson"] is not None and emb["pearson"] > geo["pearson"]:
+                geo_wins[name] = geo_wins.get(name, 0) + 1
+            if emb["pearson"] is not None and dtw["pearson"] is not None and emb["pearson"] > dtw["pearson"]:
+                dtw_wins[name] = dtw_wins.get(name, 0) + 1
 
     if not totals:
         return
 
-    print("\n\n  WINS  (embedding beats raw features)")
-    print("  " + "─" * 50)
-    ranked = sorted(totals.keys(), key=lambda n: -(counts.get(n, 0) / totals[n]))
-    for name in ranked:
-        wins  = counts.get(name, 0)
-        total = totals[name]
-        pct   = 100.0 * wins / total if total else 0
-        bar   = "█" * wins + "░" * (total - wins)
-        print(f"  {name:<30}  {bar}  {wins}/{total}  ({pct:.0f}%)")
+    for label, wins_dict in [("GEODESIC", geo_wins), ("DTW", dtw_wins)]:
+        print(f"\n\n  EMB BEATS {label} (Pearson, per animation)")
+        print("  " + "─" * 50)
+        ranked = sorted(totals.keys(), key=lambda n: -(wins_dict.get(n, 0) / totals[n]))
+        for name in ranked:
+            wins  = wins_dict.get(name, 0)
+            total = totals[name]
+            pct   = 100.0 * wins / total if total else 0
+            bar   = "█" * wins + "░" * (total - wins)
+            print(f"  {name:<30}  {bar}  {wins}/{total}  ({pct:.0f}%)")
 
 
 # ---------------------------------------------------------------------------
@@ -200,27 +218,33 @@ def winner_counts(results: List[Dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def export_csv(results: List[Dict], csv_path: Path) -> None:
+    """
+    One row per (experiment × animation).
+    emb_* varies by experiment; geo_* and dtw_* are raw-motion constants
+    (invariant across experiments for a given animation, repeated for convenience).
+    """
     rows = []
     for r in results:
-        for anim, mdict in r.get("metrics", {}).items():
-            for dist, entry in mdict.items():
-                ep = entry.get("emb_pearson")
-                rp = entry.get("raw_pearson")
-                rows.append({
-                    "experiment":    r["experiment"],
-                    "description":   r.get("description", ""),
-                    "checkpoint":    r.get("checkpoint", ""),
-                    "animation":     anim,
-                    "distance_type": dist,
-                    "emb_pearson":   ep,
-                    "emb_spearman":  entry.get("emb_spearman"),
-                    "emb_r2":        entry.get("emb_r2"),
-                    "raw_pearson":   rp,
-                    "raw_spearman":  entry.get("raw_spearman"),
-                    "raw_r2":        entry.get("raw_r2"),
-                    "emb_beats_raw": (ep > rp) if (ep is not None and rp is not None) else None,
-                    "winner":        entry.get("winner", ""),
-                })
+        for anim in ANIMS_ORDER:
+            mdict = r.get("metrics", {}).get(anim)
+            if mdict is None:
+                continue
+            emb, geo, dtw = _extract(mdict)
+            rows.append({
+                "experiment":   r["experiment"],
+                "description":  r.get("description", ""),
+                "checkpoint":   r.get("checkpoint", ""),
+                "animation":    anim,
+                "emb_pearson":  emb["pearson"],
+                "emb_spearman": emb["spearman"],
+                "emb_r2":       emb["r2"],
+                "geo_pearson":  geo["pearson"],
+                "geo_spearman": geo["spearman"],
+                "geo_r2":       geo["r2"],
+                "dtw_pearson":  dtw["pearson"],
+                "dtw_spearman": dtw["spearman"],
+                "dtw_r2":       dtw["r2"],
+            })
     if not rows:
         return
     with open(csv_path, "w", newline="") as f:
