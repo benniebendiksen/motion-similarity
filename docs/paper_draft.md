@@ -1,6 +1,6 @@
 # Self-Supervised Motion Encoders and Action-Dependent Metric Refinement for Human Perceptual Similarity
 
-*A masked-motion encoder beats geometric distances on dynamically rich actions; a learned triplet metric is required only where motion is expressively sparse.*
+*A masked-motion encoder beats geometric distances on dynamically rich actions; a learned triplet metric is required where motion is expressively sparse.*
 
 *(working manuscript draft — methods, design rationale, and results, from rating data to inference pipeline)*
 
@@ -15,19 +15,12 @@ that dominate motion analysis. Using Laban-effort-annotated motion-capture perfo
 three action types (walking, pointing, picking) paired with a triplet-based human
 similarity-rating dataset, we show that a self-supervised **masked motion predictor
 augmented with an auxiliary pose-reconstruction objective (MAMP+pose)**, combined with a
-downstream triplet-based metric-learning module trained on the human ratings, produces
+downstream triplet-based metric-learning module trained on human ratings, produces
 motion embeddings whose distances align with human perception more strongly than either
-geometric baseline, across all three actions, under a strict held-out evaluation. For the
-dynamically rich actions (walking, picking) this alignment emerges from the *unsupervised*
-encoder geometry alone; for the expressively sparse pointing action — which engages far
-fewer joints over a smaller range of motion — the learned triplet module is additionally
-required to reach a winning result. Controlled ablations isolate the contribution of each
-component and explain why prior reconstruction-only encoders captured only a single action
-type well: a **masked motion-prediction** objective alone captures walking's dynamics but
-collapses on picking, whereas a **pose-reconstruction** objective alone captures picking's
-configuration fidelity but trails on walking — two mirror-image specialists that MAMP+pose
-unifies in a single objective. All headline results are reproduced to four decimal places under a fixed evaluation
-protocol.
+geometric baseline, across all three actions, under a strict held-out evaluation. Controlled 
+ablations isolate the contribution of each component, demonstrating different encoder objectives differentially capture perceptually relevant information across actions: a **masked motion-prediction** objective alone captures walking dynamics but collapses on picking, whereas a **pose-reconstruction** objective alone captures picking
+configuration fidelity but trails on walking — two mirror-image specialists that MAMP+pose unifies in a single objective. For the dynamically rich actions (walking, picking) this alignment emerges from the *unsupervised*
+dual-coaxed encoder geometry alone; for the expressively sparse pointing action — which engages far fewer joints over a smaller range of motion — the learned triplet module is additionally required to reach a winning result. All evaluation results are reproduced to four decimal places under a fixed evaluation protocol.
 
 ---
 
@@ -53,8 +46,7 @@ motion representation can predict human perceptual judgments better than they do
 ### 1.2 Contributions
 1. A two-stage system — a self-supervised motion encoder (**MAMP+pose**) followed by a
    downstream triplet metric-learning module trained on human ratings — that beats both DTW
-   and geodesic baselines on human-perceptual similarity across **all three** action types,
-   held-out. To our knowledge this is the first single encoder to do so on this
+   and geodesic baselines on human-perceptual similarity across three action types when evaluating on motion clips held-out of either stage's training. To our knowledge this is the first single encoder to do so on this
    heterogeneous action set; the all-three result specifically requires the triplet module,
    which is decisive for pointing (§6.3) while being redundant for walking and picking.
 2. The finding that for dynamically rich actions the perceptual signal is **intrinsic to
@@ -66,8 +58,8 @@ motion representation can predict human perceptual judgments better than they do
    action type.
 4. A descriptive characterization of pointing's limited kinematic expressiveness (fewest
    active joints, smallest range of motion, shortest clips) that motivates why a learned
-   alignment layer is necessary for that action while the raw encoder suffices for the
-   others.
+   alignment layer is necessary to order that action's finer-grained variability while the
+   raw encoder suffices for the others.
 
 ---
 
@@ -159,7 +151,7 @@ trial a participant viewed three motions — **Left (0)**, **Neutral (1)**, **Ri
 and selected the two judged most similar. The dataset comprises **1,540 triplet trials per
 action** (one per distinct non-neutral effort pair, with the neutral as the third item),
 with each trial rated by a **median of 11 participants** (range 10–18). For each trial, the triplet presentation order was randomized. The
-three pairings {(0,1), (0,2), (1,2)} of a given triplet received normalized choice frequencies aggregated across its trials to 1. These count normalized values can be seen as probabilities for the selection of a given pairing as most similar within a triplet.
+three pairings {(0,1), (0,2), (1,2)} of a given triplet received normalized choice frequencies aggregated across its trials to 1. These count normalized values can therefore be seen as probabilities for the selection of a given pairing as most similar within a triplet.
 
 #### 2.4.1 Notation for the three choice frequencies
 Fix a triplet built from a non-neutral effort pair, with **Left (0)** and **Right (2)** the
