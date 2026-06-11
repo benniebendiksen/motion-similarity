@@ -20,6 +20,26 @@ __pycache__/
 *.log
 experiments/
 
+# OS cruft
+.DS_Store
+**/.DS_Store
+
+# Large model / embedding / checkpoint artifacts
+# (kept out of git; encoder embeddings + checkpoints live on the chimera cluster —
+#  see docs/REPRODUCING_SWEEP.md for how to regenerate them)
+datasets/
+model_checkpoint/
+checkpoints/
+checkpoints_*/
+sweep_ckpts/
+*.pt
+*.pth
+*.ckpt
+
+# Experimental visualization output directories (bvh/mp4 renders)
+viz_*/
+*.mp4
+
 # IDE directories
 .vscode/
 .idea/

@@ -24,8 +24,11 @@ class EmbeddingDataset:
         self.embedding_files = list(self.embedding_dir.glob("*.pt"))
         self.root_files = [f for f in self.embedding_files if "_root.pt" in f.name]
         self.rots_files = [f for f in self.embedding_files if "_rots.pt" in f.name]
-
-        print(f"Found {len(self.root_files)} root embeddings and {len(self.rots_files)} rotation embeddings")
+        # Single-vector embeddings (e.g. unified VAE latent) are saved as _emb.pt.
+        # When present, the dataset runs in single-embedding mode: there is no
+        # root/rots split, so all combination_methods return the same vector.
+        self.emb_files = [f for f in self.embedding_files if "_emb.pt" in f.name]
+        self.single_embedding_mode = len(self.emb_files) > 0 and len(self.root_files) == 0
 
         # Generate valid states and drives
         valid_effort_tuples = self._generate_valid_effort_tuples()
@@ -34,23 +37,35 @@ class EmbeddingDataset:
         self.embedding_pairs = {}
         self.effort_mapping = {}
 
-        for root_file in self.root_files:
-            base_name = root_file.name.replace("_root.pt", "")
-            rots_file = self.embedding_dir / f"{base_name}_rots.pt"
-
-            if rots_file.exists():
-                # Extract and validate effort values
+        if self.single_embedding_mode:
+            print(f"Found {len(self.emb_files)} single-vector (_emb.pt) embeddings — single-embedding mode")
+            for emb_file in self.emb_files:
+                base_name = emb_file.name.replace("_emb.pt", "")
                 effort_tuple = self._extract_effort_tuple(base_name)
-
-                # Only keep files with valid effort combinations
                 if effort_tuple in valid_effort_tuples:
-                    self.embedding_pairs[base_name] = {
-                        'root_path': root_file,
-                        'rots_path': rots_file
-                    }
+                    self.embedding_pairs[base_name] = {'emb_path': emb_file}
                     self.effort_mapping[base_name] = effort_tuple
                 else:
                     print(f"Skipping {base_name}: effort tuple {effort_tuple} not in valid states/drives")
+        else:
+            print(f"Found {len(self.root_files)} root embeddings and {len(self.rots_files)} rotation embeddings")
+            for root_file in self.root_files:
+                base_name = root_file.name.replace("_root.pt", "")
+                rots_file = self.embedding_dir / f"{base_name}_rots.pt"
+
+                if rots_file.exists():
+                    # Extract and validate effort values
+                    effort_tuple = self._extract_effort_tuple(base_name)
+
+                    # Only keep files with valid effort combinations
+                    if effort_tuple in valid_effort_tuples:
+                        self.embedding_pairs[base_name] = {
+                            'root_path': root_file,
+                            'rots_path': rots_file
+                        }
+                        self.effort_mapping[base_name] = effort_tuple
+                    else:
+                        print(f"Skipping {base_name}: effort tuple {effort_tuple} not in valid states/drives")
 
         print(f"Successfully paired {len(self.embedding_pairs)} embedding pairs after filtering")
         print(f"Kept files with {len(set(self.effort_mapping.values()))} unique effort combinations")
@@ -196,6 +211,13 @@ class EmbeddingDataset:
         Returns:
             Combined embedding tensor
         """
+        # Single-embedding mode: one unified vector, combination_method is moot.
+        if getattr(self, 'single_embedding_mode', False):
+            emb = torch.load(self.embedding_pairs[base_name]['emb_path'], weights_only=True)
+            if emb.dim() > 1:
+                emb = emb.squeeze()
+            return emb
+
         root_emb, rots_emb = self.load_embedding_pair(base_name)
 
         # Ensure embeddings are 1D

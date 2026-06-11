@@ -1633,6 +1633,7 @@ class EmbeddingRefiningSimilarityNetwork:
         self._best_model_state = None   # tracks best-val-loss state for final checkpoint
         epochs_no_improve = 0
         patience = getattr(self.config, 'early_stopping_patience', 15)
+        warmup  = getattr(self.config, 'early_stopping_warmup', 0)
         validation_frequency = 1  # Validate every epoch like original
         neutral_update_frequency = getattr(self.config, 'neutral_update_frequency', 10)
 
@@ -1733,11 +1734,19 @@ class EmbeddingRefiningSimilarityNetwork:
                     epochs_no_improve = 0
                     self.save_checkpoint(epoch + 1)
                     print(f"New best model! Val Loss: {val_epoch_loss:.4f}")
+                elif val_epoch_loss == best_val_loss == 0.0 and epoch_loss < best_train_loss:
+                    # Val is tied at zero; use training loss as tiebreaker so the
+                    # checkpoint keeps improving through the val=0 plateau.
+                    best_train_loss = epoch_loss
+                    import copy
+                    self._best_model_state = copy.deepcopy(self.network.state_dict())
+                    print(f"New best model (train tiebreak at val=0)! Train Loss: {epoch_loss:.4f}")
                 elif val_epoch_loss > best_val_loss:
-                    epochs_no_improve += 1
-                    if epochs_no_improve >= patience:
-                        print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} consecutive epochs).")
-                        break
+                    if epoch >= warmup:
+                        epochs_no_improve += 1
+                        if epochs_no_improve >= patience:
+                            print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} consecutive epochs).")
+                            break
 
                 # Print summary
                 print(f"Epoch {epoch + 1}: Training Loss = {epoch_loss:.4f}, Validation Loss = {val_epoch_loss:.4f}")

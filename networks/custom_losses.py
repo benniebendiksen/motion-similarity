@@ -533,6 +533,15 @@ def create_batch_triplet_loss(triplet_mining_modules, module_start_indices=None,
                 triplet_losses = calculate_triplet_loss(y_true_module, y_pred_module, triplet_mining, BATCH_STRATEGY, classes_distances)
                 triplet_loss = torch.sum(triplet_losses)
                 overall_triplet_loss += triplet_loss
+
+                # DTW-fusion regularization (no-op when weight is 0 or no matrix).
+                dtw_w = getattr(triplet_mining, 'dtw_loss_weight', 0.0)
+                dtw_mat = getattr(triplet_mining, 'dtw_distance_matrix', None)
+                if dtw_w and dtw_mat is not None:
+                    from networks.dtw_fusion import dtw_alignment_loss
+                    overall_triplet_loss = overall_triplet_loss + dtw_w * dtw_alignment_loss(
+                        classes_distances, dtw_mat)
+
                 valid_modules += 1
             except Exception as e:
                 print(f"1: Error in triplet loss calculation for module {i}: {e}")

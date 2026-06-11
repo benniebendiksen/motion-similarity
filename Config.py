@@ -28,9 +28,17 @@ class Config:
         # Counters only increment when val loss is strictly worse than the current best,
         # so a sustained val loss of 0 does not trigger early stopping.
         self.early_stopping_patience = 15
+        # Epochs before early stopping is eligible. Patience counter only starts after this
+        # many epochs. Set to 0 (default) to disable. Used by clustered/pointing variants to
+        # survive the val=0 collapse and neutral re-clustering sawtooth.
+        self.early_stopping_warmup = 0
         # Re-cluster output-space neutrals every N epochs in EmbeddingRefiningSimilarityNetwork.
         # Set to None to disable periodic re-clustering (only clusters once before training).
         self.neutral_update_frequency = 10
+        # Weight (lambda) on the DTW-fusion alignment term added to triplet loss.
+        # 0.0 = disabled (pure triplet baseline). When >0, each module's embedding
+        # distance matrix is pulled toward its frozen rank-normalized DTW matrix.
+        self.dtw_loss_weight = 0.0
         self.similarity_per_anim_class_num = 57
 
         self.similarity_dict_file_name = 'similarity_labels_exemplars_dict_local.pickle'

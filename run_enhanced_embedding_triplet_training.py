@@ -49,6 +49,7 @@ class EnhancedEmbeddingTrainer:
         self.config = config
         self.neutral_learner = None
         self.learned_neutrals = {}
+        self.animation_dicts = {}
         
     def setup_clustering_based_training(self,
                                        embedding_dirs: Dict[str, str],
@@ -115,16 +116,19 @@ class EnhancedEmbeddingTrainer:
         neutral_save_path = Path(self.config.checkpoint_root_dir) / "learned_neutrals.pkl"
         self.neutral_learner.save_neutrals(neutral_save_path)
         
-        # Replace existing neutral exemplars with learned ones
+        # Replace existing neutral exemplars with learned ones.
+        # Neutral must be first so TripletMining class→index mapping is consistent
+        # with the data loader insertion order.
         for anim_name, neutral_rep in self.learned_neutrals.items():
             if anim_name in animation_dicts:
-                # Remove old neutral if it exists
-                if (0, 0, 0, 0) in animation_dicts[anim_name]:
-                    del animation_dicts[anim_name][(0, 0, 0, 0)]
-                
-                # Add learned neutral as the neutral exemplar
-                animation_dicts[anim_name][(0, 0, 0, 0)] = [neutral_rep]
-                logger.info(f"Replaced {anim_name} neutral with learned representation")
+                old_dict = animation_dicts[anim_name]
+                new_dict = {(0, 0, 0, 0): [neutral_rep]}
+                new_dict.update({k: v for k, v in old_dict.items() if k != (0, 0, 0, 0)})
+                animation_dicts[anim_name] = new_dict
+                logger.info(f"Replaced {anim_name} neutral with learned representation (placed first)")
+
+        # Store for use in _create_triplet_modules_with_learned_neutrals
+        self.animation_dicts = animation_dicts
         
         # Create train/validation split
         train_indices, val_indices = self._create_stratified_split(
@@ -235,16 +239,18 @@ class EnhancedEmbeddingTrainer:
         modules = []
         
         for i, anim_name in enumerate(animation_names):
-            # Create module with appropriate settings
+            # bool_fixed=True: AE-space centroid is a placeholder; output-space
+            # k-means via update_output_space_neutrals() replaces it before epoch 1.
             module = TripletMining(
-                bool_drop=False,  # Don't drop neutral, we'll use learned one
-                bool_fixed=True,  # Fix the neutral representation
+                bool_drop=False,
+                bool_fixed=True,
                 squared_left_right=False,
                 squared_class_neut=False,
                 anim_name=anim_name,
                 config=self.config,
                 valid_indices=indices[i],
-                exclude_neutral_completely=False  # Use neutral in training
+                exclude_neutral_completely=False,
+                preloaded_dict=self.animation_dicts.get(anim_name)
             )
             
             # Set the learned neutral representation

@@ -58,6 +58,13 @@ $ conda activate motion-similarity
 ### Execute
 run the project from the root directory with `python main.py`.
 
+### Reproducing the model sweep
+For the full per-model training, embedding-extraction, and evaluation sweep behind the
+paper's results (all nine encoders, both raw embeddings and triplet-refined, across walking,
+pointing, and picking) — including exact checkpoints, encode commands, environment knobs,
+and the geometric baselines — see [docs/REPRODUCING_SWEEP.md](docs/REPRODUCING_SWEEP.md).
+The working manuscript draft is at [docs/paper_draft.md](docs/paper_draft.md).
+
 
 
 

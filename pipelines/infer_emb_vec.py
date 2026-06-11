@@ -1013,6 +1013,65 @@ def compute_geodesic_distances(dict_raw_features):
     return distances
 
 
+def compute_geodesic_distances_dtw(dict_raw_features, num_joints=28):
+    """
+    DTW-aligned quaternion-geodesic distance on RAW variable-length sequences.
+
+    Fixes the bias of the legacy compute_geodesic_distances, which required all
+    clips be padded to 137 frames (repeating the last frame) and then compared
+    frame-i vs frame-i. That padding injected large blocks of identical frozen
+    poses → artificially zero geodesic contribution over the padded region,
+    deflating distances between clips that settle to similar rest poses.
+
+    Here each clip keeps its true length; per-frame cost is the mean quaternion
+    geodesic 2*arccos(|<q1,q2>|) over joints, and DTW finds the optimal temporal
+    alignment path — the same non-linear alignment DTW uses, but with a geodesic
+    (not Euclidean) local cost. No padding, no rigid pointwise matching.
+    """
+    # Normalize quaternions, keep native length
+    feats = {}
+    for key, sample in dict_raw_features.items():
+        if isinstance(sample, list) and len(sample) > 0:
+            sample = sample[0]
+        if _TF_AVAILABLE and isinstance(sample, tf.Tensor):
+            sample = sample.numpy()
+        elif not isinstance(sample, np.ndarray):
+            raise Exception(f"Sample is not tf.Tensor or np.ndarray but: {type(sample)}")
+        T = sample.shape[0]
+        q = sample.reshape(T, num_joints, 4)
+        norms = np.sqrt(np.sum(q ** 2, axis=-1, keepdims=True))
+        feats[key] = q / (norms + 1e-10)
+
+    keys = list(feats.keys())
+    n = len(keys)
+    distances = []
+
+    def geo_frame_cost(qa, qb):
+        # qa:[J,4] qb:[J,4] -> scalar mean joint geodesic
+        dot = np.abs(np.sum(qa * qb, axis=-1))
+        return np.mean(2.0 * np.arccos(np.clip(dot, -1.0, 1.0)))
+
+    for i, j in combinations(range(n), 2):
+        A = feats[keys[i]]; B = feats[keys[j]]
+        Ta, Tb = A.shape[0], B.shape[0]
+        # DTW with geodesic local cost
+        D = np.full((Ta + 1, Tb + 1), np.inf)
+        D[0, 0] = 0.0
+        for a in range(1, Ta + 1):
+            qa = A[a - 1]
+            for b in range(1, Tb + 1):
+                c = geo_frame_cost(qa, B[b - 1])
+                D[a, b] = c + min(D[a - 1, b], D[a, b - 1], D[a - 1, b - 1])
+        # length-normalize by the alignment path length (~max(Ta,Tb)) so longer
+        # clips are not penalized purely for having more frames
+        dist = D[Ta, Tb] / max(Ta, Tb)
+        distances.append((dist, keys[i], keys[j]))
+
+    distances.sort()
+    print(f"Computed {len(distances)} DTW-aligned geodesic distances (raw, unpadded)")
+    return distances
+
+
 def main_with_refinement():
     """
     Main execution function that analyzes each animation type separately using embedding-based networks
@@ -1060,6 +1119,11 @@ def main_with_refinement():
     # Animation types to process
     animations = ["walking", "pointing", "picking"]
     # animations = ["walking"]
+    # MOTION_ANIMATIONS env var restricts which animations to evaluate (comma-sep),
+    # e.g. "pointing" when the checkpoint was trained on a single animation only.
+    _anim_env = os.environ.get("MOTION_ANIMATIONS")
+    if _anim_env:
+        animations = [a.strip() for a in _anim_env.split(",") if a.strip()]
 
     # Create containers for aggregated results
     all_embeddings = {}
@@ -1128,10 +1192,16 @@ def main_with_refinement():
         # Load embedding-based similarity data instead of raw motion data
         print("Loading pre-trained embeddings data...")
         try:
+            # Per-animation embedding-dir override (e.g. VAE latents). Env var
+            # MOTION_EMB_DIR_<ANIM> takes priority; falls back to the ae_paired set.
+            _emb_dir = os.environ.get(
+                f"MOTION_EMB_DIR_{anim_name.upper()}",
+                str(_DATASETS / f"lma_perform_{anim_name}_ae_paired"),
+            )
             # Try to load embedding-based similarity data first
             embedding_similarity_dict = load_similarity_data_from_embeddings(
                 bool_drop=True, anim_name=anim_name, config=config,
-                embedding_dir=str(_DATASETS / f"lma_perform_{anim_name}_ae_paired"),
+                embedding_dir=_emb_dir,
                 combination_method=combination_method, force_regenerate=True)["train"]
 
             # Filter by valid_indices if evaluating only validation set
@@ -1200,8 +1270,13 @@ def main_with_refinement():
         # Calculate L2 distances for refined embeddings
         embedding_distances = calculate_pairwise_distances(embeddings)
 
-        # Calculate geodesic distances for raw features
-        geodesic_distances = compute_geodesic_distances(raw_features)
+        # Calculate geodesic distances on RAW, UNPADDED features with DTW alignment.
+        # The legacy compute_geodesic_distances required pad-to-137 + frame-i-vs-i
+        # comparison, which injected frozen-pose padding bias. Load raw (unbalanced)
+        # features and use the DTW-aligned geodesic instead.
+        raw_features_geo = get_raw_features_without_dataloader(
+            anim_name, config, valid_indices=valid_indices, balance_class_frame_counts=False)
+        geodesic_distances = compute_geodesic_distances_dtw(raw_features_geo)
 
         # PART 5: Analyze relationships with human perception for embedding method and geodesic distance method
         print("\n5. ANALYZING RELATIONSHIPS WITH HUMAN PERCEPTION")

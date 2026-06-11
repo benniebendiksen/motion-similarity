@@ -195,10 +195,16 @@ class EnhancedEmbeddingTrainer:
         train_indices = []
         val_indices = []
         
-        for anim_dict in similarity_dicts:
+        # Fixed-seed RNG so the held-out split is identical across encoders/runs.
+        # Without this the split was uncontrolled (global NumPy state), making
+        # cross-encoder comparisons confounded by split luck and non-reproducible.
+        split_seed = int(os.environ.get("MOTION_SPLIT_SEED", "42"))
+        split_rng = np.random.RandomState(split_seed)
+
+        for anim_idx, anim_dict in enumerate(similarity_dicts):
             # Get all keys except neutral
             keys = [k for k in anim_dict.keys() if k != (0, 0, 0, 0)]
-            
+
             # Group by effort magnitude for stratified sampling
             effort_groups = {}
             for key in keys:
@@ -206,14 +212,17 @@ class EnhancedEmbeddingTrainer:
                 if magnitude not in effort_groups:
                     effort_groups[magnitude] = []
                 effort_groups[magnitude].append(key)
-            
+
             # Sample from each group proportionally
             train_keys = set()
             val_keys = set()
-            
-            for magnitude, group_keys in effort_groups.items():
+
+            # Sort groups + keys for deterministic ordering before the seeded shuffle,
+            # so the split depends only on the seed, not dict insertion order.
+            for magnitude in sorted(effort_groups.keys()):
+                group_keys = sorted(effort_groups[magnitude])
                 n_val = max(1, int(len(group_keys) * val_ratio))
-                np.random.shuffle(group_keys)
+                split_rng.shuffle(group_keys)
                 
                 val_keys.update(group_keys[:n_val])
                 train_keys.update(group_keys[n_val:])
