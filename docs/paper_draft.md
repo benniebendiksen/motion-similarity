@@ -1,4 +1,6 @@
-# Self-Supervised Masked Motion Encoders Capture Human Perceptual Motion Similarity
+# Self-Supervised Motion Encoders and Action-Dependent Metric Refinement for Human Perceptual Similarity
+
+*A masked-motion encoder beats geometric distances on dynamically rich actions; a learned triplet metric is required only where motion is expressively sparse.*
 
 *(working manuscript draft — methods, design rationale, and results, from rating data to inference pipeline)*
 
