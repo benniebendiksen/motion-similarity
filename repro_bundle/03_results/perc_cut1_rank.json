@@ -1,0 +1,532 @@
+{
+  "A": {
+    "folds": [
+      {
+        "repeat": 0,
+        "fold": 0,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7859374417789804,
+          "pointing": 0.599963910909138,
+          "picking": 0.8513469609596043
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 1,
+        "base_epoch": 400,
+        "test": {
+          "walking": 0.5875881992108191,
+          "pointing": 0.36873006250040996,
+          "picking": 0.39984819055160553
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 2,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.5896033564042287,
+          "pointing": 0.1170881446293425,
+          "picking": 0.5766831759056306
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 3,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7759405426574587,
+          "pointing": 0.551716569576311,
+          "picking": 0.7458208603557833
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 4,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.6608146034482277,
+          "pointing": 0.45298123108116106,
+          "picking": 0.6319101747565398
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 0,
+        "base_epoch": 600,
+        "test": {
+          "walking": 0.3784403821530733,
+          "pointing": 0.11774352667135521,
+          "picking": 0.5587284887498877
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 1,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.4003323770304961,
+          "pointing": 0.429394297248961,
+          "picking": 0.2397711609441658
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 2,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.6899229364069764,
+          "pointing": 0.44529313467122766,
+          "picking": 0.4237779657914847
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 3,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.739228992768764,
+          "pointing": 0.36361838862877105,
+          "picking": 0.7011089266233381
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 4,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.6062626978863042,
+          "pointing": 0.6063644580693286,
+          "picking": 0.6802826505729476
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 0,
+        "base_epoch": 200,
+        "test": {
+          "walking": 0.5120821718321683,
+          "pointing": 0.3043306014357946,
+          "picking": 0.2628468084267921
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 1,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.8000836101969793,
+          "pointing": 0.6855849848638901,
+          "picking": 0.7676698963585551
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 2,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.6465567579121471,
+          "pointing": 0.3207264138859494,
+          "picking": 0.6129508462081941
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 3,
+        "base_epoch": 800,
+        "test": {
+          "walking": 0.6785338446853515,
+          "pointing": 0.1718606343265167,
+          "picking": 0.47901562484700716
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 4,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7407499614201174,
+          "pointing": 0.6665766769115824,
+          "picking": 0.6342796042110596
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 0,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.67810032338231,
+          "pointing": 0.28368638180381406,
+          "picking": 0.6329762591799287
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 1,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.7379310794973291,
+          "pointing": 0.36039845053788117,
+          "picking": 0.6296586526625698
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 2,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.6592119874836446,
+          "pointing": 0.6869272238641952,
+          "picking": 0.5081659007544079
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 3,
+        "base_epoch": 400,
+        "test": {
+          "walking": 0.2979662086278547,
+          "pointing": 0.4781479857857825,
+          "picking": 0.3883086359908757
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 4,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.5212789566180501,
+          "pointing": 0.25729307873567103,
+          "picking": 0.3427163630732962
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 0,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.5373010561886958,
+          "pointing": 0.3127499203273769,
+          "picking": 0.4513839978056014
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 1,
+        "base_epoch": 100,
+        "test": {
+          "walking": 0.7993651493773157,
+          "pointing": 0.2880846365355119,
+          "picking": 0.6406926671507779
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 2,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.441529554698469,
+          "pointing": 0.11967536100614347,
+          "picking": 0.3654216513320265
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 3,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.7430890892825823,
+          "pointing": 0.5849149862846041,
+          "picking": 0.6266101307165067
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 4,
+        "base_epoch": 300,
+        "test": {
+          "walking": 0.7431735508899542,
+          "pointing": 0.5346022033119681,
+          "picking": 0.8507669893850931
+        }
+      }
+    ],
+    "aggregate": {
+      "walking": {
+        "mean": 0.6300409932735319
+      },
+      "pointing": {
+        "mean": 0.4043381305441075
+      },
+      "picking": {
+        "mean": 0.5601097033325472
+      }
+    }
+  },
+  "B": {
+    "folds": [
+      {
+        "repeat": 0,
+        "fold": 0,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.8592194948130475,
+          "pointing": 0.7288145149310207,
+          "picking": 0.8320502396401079
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 1,
+        "base_epoch": 400,
+        "test": {
+          "walking": 0.703856725208837,
+          "pointing": 0.3273330622579055,
+          "picking": 0.4950613331315208
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 2,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.6683139522591773,
+          "pointing": 0.11541386229431853,
+          "picking": 0.6139439430656604
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 3,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7715134395286084,
+          "pointing": 0.6305072992533386,
+          "picking": 0.7185002026994038
+        }
+      },
+      {
+        "repeat": 0,
+        "fold": 4,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.7640542909355142,
+          "pointing": 0.470716439716367,
+          "picking": 0.768856652257957
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 0,
+        "base_epoch": 600,
+        "test": {
+          "walking": 0.4533753224626651,
+          "pointing": 0.24707294783692704,
+          "picking": 0.6058163805296728
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 1,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.5662580878365586,
+          "pointing": 0.6184132740078924,
+          "picking": 0.23771749378927473
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 2,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7582589985496303,
+          "pointing": 0.4476683237204341,
+          "picking": 0.5287323218052635
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 3,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.8221057701820814,
+          "pointing": 0.572549699435791,
+          "picking": 0.7404478206720565
+        }
+      },
+      {
+        "repeat": 1,
+        "fold": 4,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.3551989276733351,
+          "pointing": 0.15117341608650076,
+          "picking": 0.4444370461514571
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 0,
+        "base_epoch": 200,
+        "test": {
+          "walking": 0.5750861590499768,
+          "pointing": 0.2588576364375795,
+          "picking": 0.29898304630776745
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 1,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.7917941144986094,
+          "pointing": 0.6074197236252706,
+          "picking": 0.7424391401673984
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 2,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.7188860386654577,
+          "pointing": 0.355334557138068,
+          "picking": 0.568600460543522
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 3,
+        "base_epoch": 800,
+        "test": {
+          "walking": 0.5978300781644389,
+          "pointing": 0.40147141583361856,
+          "picking": 0.5758561940646749
+        }
+      },
+      {
+        "repeat": 2,
+        "fold": 4,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.8194107119550147,
+          "pointing": 0.7259449115305567,
+          "picking": 0.7024069323618961
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 0,
+        "base_epoch": 1000,
+        "test": {
+          "walking": 0.7002990704481423,
+          "pointing": 0.3582246056072859,
+          "picking": 0.5916054039381579
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 1,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.7917471411512548,
+          "pointing": 0.3222618343786201,
+          "picking": 0.757669575416888
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 2,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.7474931643847775,
+          "pointing": 0.7004205017883273,
+          "picking": 0.6839859449176905
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 3,
+        "base_epoch": 400,
+        "test": {
+          "walking": 0.7553746104112399,
+          "pointing": 0.46450542488177443,
+          "picking": 0.5805519139454725
+        }
+      },
+      {
+        "repeat": 3,
+        "fold": 4,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.5145065131617973,
+          "pointing": 0.2630833651250097,
+          "picking": 0.3305010021147366
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 0,
+        "base_epoch": 700,
+        "test": {
+          "walking": 0.6413064893675352,
+          "pointing": 0.3420588601213783,
+          "picking": 0.39460735887775455
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 1,
+        "base_epoch": 100,
+        "test": {
+          "walking": 0.8542822431372648,
+          "pointing": 0.576760042795866,
+          "picking": 0.7690715156668256
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 2,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.45055856099247954,
+          "pointing": 0.19432999096711867,
+          "picking": 0.35019107149668244
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 3,
+        "base_epoch": 1100,
+        "test": {
+          "walking": 0.8000039239717561,
+          "pointing": 0.38493519469394233,
+          "picking": 0.7313699606802017
+        }
+      },
+      {
+        "repeat": 4,
+        "fold": 4,
+        "base_epoch": 300,
+        "test": {
+          "walking": 0.7705247687820727,
+          "pointing": 0.7268209547068836,
+          "picking": 0.8249318325645778
+        }
+      }
+    ],
+    "aggregate": {
+      "walking": {
+        "mean": 0.6900503439036509
+      },
+      "pointing": {
+        "mean": 0.43968367436687184
+      },
+      "picking": {
+        "mean": 0.5955333914722649
+      }
+    }
+  }
+}

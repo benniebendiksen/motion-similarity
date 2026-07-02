@@ -963,19 +963,28 @@ class EmbeddingSimilarityNetworkV0(nn.Module):
     def __init__(self, input_embedding_dim, output_embedding_size):
         super(EmbeddingSimilarityNetworkV0, self).__init__()
 
-        # Layer 1: Embedding -> 64 (matches CNN's first stage complexity)
+        # Normalization: LayerNorm (per-sample, over features) is used rather than
+        # BatchNorm. The metric MLP is trained on a single batch that concatenates
+        # classes from all co-trained actions; BatchNorm's per-feature statistics are
+        # then pooled across that batch, leaking one action's activation distribution
+        # into the normalization of another. LayerNorm normalizes each sample over its
+        # own features, so an action's embedding is normalized independently of batch
+        # composition. (Attribute names retain the historical *batch_norm*/*bn* labels
+        # to keep forward() and checkpoints compatible.)
+
+        # Layer 1: Embedding -> 64
         self.fc1 = nn.Linear(input_embedding_dim, 64)
-        self.dropout1 = nn.Dropout(0.2)  # Match CNN dropout rate
-        self.batch_norm_1 = nn.BatchNorm1d(64)  # Match CNN naming
+        self.dropout1 = nn.Dropout(0.2)
+        self.batch_norm_1 = nn.LayerNorm(64)
 
-        # Layer 2: 64 -> 128 (matches CNN's second stage)
+        # Layer 2: 64 -> 128
         self.fc2 = nn.Linear(64, 128)
-        self.dropout2 = nn.Dropout(0.2)  # Match CNN dropout rate
-        self.batch_norm_2 = nn.BatchNorm1d(128)  # Match CNN naming
+        self.dropout2 = nn.Dropout(0.2)
+        self.batch_norm_2 = nn.LayerNorm(128)
 
-        # Layer 3: 128 -> 256 (matches CNN's third stage feature expansion)
+        # Layer 3: 128 -> 256
         self.fc3 = nn.Linear(128, 256)
-        self.bn3 = nn.BatchNorm1d(256)  # Match CNN naming (bn3)
+        self.bn3 = nn.LayerNorm(256)
 
         # Final layer: 256 -> output_embedding_size (matches CNN's final fc layer)
         self.fc = nn.Linear(256, output_embedding_size)  # Match CNN naming
@@ -1439,6 +1448,7 @@ class EmbeddingRefiningSimilarityNetwork:
         import numpy as np
 
         # Set random seed
+        self.seed = seed
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -1461,9 +1471,10 @@ class EmbeddingRefiningSimilarityNetwork:
         print(f"Architecture variant: {self.architecture_variant}")
         self.checkpoint_dir = checkpoint_root_dir
 
-        # Simplified loss options - no advanced features
-        self.use_perception_loss = False  # Force to False
-        self.use_adaptive_distance = False  # Force to False
+        # Loss options. Historically forced off (base semi-hard triplet only); now honors
+        # the constructor flag so the perception-aligned (integrated) loss can be exercised.
+        self.use_perception_loss = use_perception_loss
+        self.use_adaptive_distance = use_adaptive_distance
         self.lr_scheduler_type = lr_scheduler_type
         self.initial_lr = 0.0001
 
@@ -1521,17 +1532,30 @@ class EmbeddingRefiningSimilarityNetwork:
         # Create simplified loss functions - base triplet loss only
         import networks.custom_losses as custom_losses
 
-        print("Creating base triplet loss functions...")
-        self.train_criterion = custom_losses.create_batch_triplet_loss(
-            self.train_triplet_modules,
-            self.train_loader.module_start_indices,
-            self.train_loader.module_sizes
-        )
+        if self.use_perception_loss:
+            print("Creating perception-aligned (integrated) loss functions...")
+            self.train_criterion = custom_losses.create_batch_integrated_loss(
+                self.train_triplet_modules,
+                module_start_indices=self.train_loader.module_start_indices,
+                module_sizes=self.train_loader.module_sizes
+            )
+            self.val_criterion = custom_losses.create_batch_integrated_loss(
+                self.val_triplet_modules,
+                module_start_indices=self.validation_loader.module_start_indices,
+                module_sizes=self.validation_loader.module_sizes
+            )
+        else:
+            print("Creating base triplet loss functions...")
+            self.train_criterion = custom_losses.create_batch_triplet_loss(
+                self.train_triplet_modules,
+                self.train_loader.module_start_indices,
+                self.train_loader.module_sizes
+            )
 
-        self.val_criterion = custom_losses.create_batch_triplet_loss(
-            self.val_triplet_modules,
-            self.validation_loader.module_start_indices,
-            self.validation_loader.module_sizes
+            self.val_criterion = custom_losses.create_batch_triplet_loss(
+                self.val_triplet_modules,
+                self.validation_loader.module_start_indices,
+                self.validation_loader.module_sizes
         )
 
         self.criterion = self.train_criterion
@@ -1607,7 +1631,7 @@ class EmbeddingRefiningSimilarityNetwork:
                 continue
 
             n_clusters = min(5, len(module_outputs))
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            kmeans = KMeans(n_clusters=n_clusters, random_state=getattr(self, 'seed', 42), n_init=10)
             kmeans.fit(module_outputs)
 
             # Use the centroid of the most-central cluster (closest to global mean)

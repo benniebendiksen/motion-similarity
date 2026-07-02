@@ -331,7 +331,8 @@ def run_enhanced_triplet_training(
         config=config,
         lr_scheduler_type=training_config.get('scheduler', 'plateau'),
         use_perception_loss=training_config.get('use_perception_loss', False),
-        use_adaptive_distance=training_config.get('use_adaptive_distance', False)
+        use_adaptive_distance=training_config.get('use_adaptive_distance', False),
+        seed=training_config.get('seed', 42)
     )
     
     # Print configuration summary

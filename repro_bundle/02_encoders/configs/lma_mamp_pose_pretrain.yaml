@@ -1,0 +1,38 @@
+# data — LMA 6D motion via our feeder, with states/drives held out
+feeder: feeder.feeder_lma.Feeder
+train_feeder_args:
+  holdout_lma: True
+  window_size: 120
+
+# model — MAMP masked motion predictor adapted to LMA (6D, 34 joints, 120 frames)
+model: model_mamp.transformer.Transformer
+model_args:
+  dim_in: 6
+  dim_feat: 256
+  decoder_dim_feat: 256
+  depth: 8
+  decoder_depth: 5
+  num_heads: 8
+  mlp_ratio: 4
+  num_frames: 120
+  num_joints: 34
+  patch_size: 1
+  t_patch_size: 4
+  qkv_bias: True
+  qk_scale: None
+  drop_rate: 0.
+  attn_drop_rate: 0.
+  drop_path_rate: 0.
+  norm_skes_loss: True
+  pose_weight: 1.0
+
+# training
+epochs: 600
+warmup_epochs: 20
+batch_size: 64
+blr: 1e-3
+min_lr: 5e-4
+weight_decay: 0.05
+mask_ratio: 0.80
+motion_stride: 1
+motion_aware_tau: 0.75

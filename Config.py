@@ -116,6 +116,13 @@ class Config:
             self.bvh_files_dir_pointing = self._remote_machine_paths['bvh_files_dir_pointing']
             self.bvh_files_dir_picking = self._remote_machine_paths['bvh_files_dir_picking']
             self.similarity_exemplars_dir = self._remote_machine_paths['similarity_exemplars_dir']
+            # Per-job override: the triplet trainer DELETES the per-action embedding pickle each
+            # fold to force regeneration; concurrent jobs sharing one exemplars_dir race on that
+            # delete (FileNotFoundError). Set SIMILARITY_EXEMPLARS_DIR to an isolated per-job dir.
+            _ex_override = os.environ.get("SIMILARITY_EXEMPLARS_DIR")
+            if _ex_override:
+                os.makedirs(_ex_override, exist_ok=True)
+                self.similarity_exemplars_dir = _ex_override
             # not used for sim network
             self.effort_network_exemplars_dir = self._remote_machine_paths['effort_network_exemplars_dir']
             # not used for sim network
