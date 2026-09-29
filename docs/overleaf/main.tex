@@ -1,65 +1,52 @@
-\documentclass[sigconf,nonacm]{acmart}
-\usepackage{enumitem}
-\usepackage{booktabs}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage[normalem]{ulem}
-\newcommand{\remove}[1]{\sout{#1}}
-% ---- draft conveniences: suppress ACM reference block / conference banner ----
-\settopmatter{printacmref=false, printccs=false}
-\setcopyright{none}
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage[submission]{aaai2027}  % DO NOT CHANGE THIS
+\usepackage[hyphens]{url}  % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm}  % DO NOT CHANGE THIS
+\usepackage{natbib}  % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\frenchspacing  % DO NOT CHANGE THIS
+\usepackage{amsmath} % math
+\usepackage{amssymb} % math symbols
+\usepackage{enumitem} % list customization
+\usepackage{booktabs} % better tables
 
-\AtBeginDocument{%
-  \providecommand\BibTeX{{%
-    \normalfont B\kern-0.5em{\scshape i\kern-0.25em b}\kern-0.8em\TeX}}}
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
 
-\begin{document}
+\setcounter{secnumdepth}{2} % number sections and subsections (cross-refs rely on this)
 
 \title{Motion Encoding for Human Perceptual Similarity}
+\author{Anonymous Submission}
+\affiliations{}
 
-\author{Bennie Bendiksen Gutierrez}
-\email{b.bendiksen001@umb.edu}
-\affiliation{%
-  \institution{University of Massachusetts Boston}
-  \city{Boston}
-  \state{Massachusetts}
-  \country{USA}
-}
-
-\author{Funda Durupinar}
-\affiliation{%
-  \institution{University of Massachusetts Boston}
-  \city{Boston}
-  \state{Massachusetts}
-  \country{USA}
-}
-
-\renewcommand{\shortauthors}{Bendiksen Gutierrez and Durupinar}
+\begin{document}
+\maketitle
 
 \begin{abstract}
-We ask whether a learned representation of human motion can predict {perceptual}
-similarity---how similar two movements appear to human observers---more faithfully than
-geometric distance measures (Dynamic Time Warping and a quaternion-geodesic distance) that
-dominate motion analysis. Using Laban-annotated motion-capture performances of three
-action types (walking, pointing, picking) paired with a triplet-based human similarity-rating
-dataset, we show that a self-supervised {masked motion predictor augmented with an
-auxiliary pose-reconstruction objective (MAMP+pose)} produces motion embeddings whose
-{raw, unsupervised} distances align with human perception more strongly than both
-geometric baselines {and} a generic learned motion encoder
-across all three actions, under a strict, repeated, leakage-clean nested cross-validation. To
-our knowledge, this is the first single encoder to achieve this. A progressive ablation
-isolates the contribution of each objective and motivates the final design: the reconstruction
-and masked-prediction objectives prove complementary---each strong where the other is weak---and
-composing them is the only design competitive on all three actions. We further show that the
-human ratings, when used to fine-tune the encoder under a perceptual objective, further improve
-alignment on all three actions. All claims are reported as fold-averaged correlations with
-calibrated variability, against baselines re-evaluated on the identical folds.
+We show that a single self-supervised motion encoder predicts human judgments of motion similarity more
+accurately than geometric distance measures and reconstruction-based transformer encoders across three
+deliberately varied action types: object-directed picking, communicative pointing, and walking
+locomotion. We measure perceptual alignment using Spearman's rank correlation between model-derived
+similarity rankings and human perceptual ratings. Our encoder, MAMP+pose, combines masked motion
+prediction, which requires the model to infer the dynamics of unobserved joints, with auxiliary pose
+reconstruction, which preserves information about static body configuration. It further matches or exceeds TMR, a 
+supervised text-to-motion representation, on the two kinematically rich actions, trailing only on communicative pointing. 
+A subsequent light triplet-based perceptual fine-tuning surpasses alignment over the large semantic supervision of TMR. With the same fine-tuning applied 
+to TMR, TMR retains its edge on pointing, suggesting semantic supervision helps more on less kinematically expressive actions.
+Reconstruction capacity does not account for perceptual alignment either. A higher-capacity transformer
+reconstructs motion better yet aligns no more closely with human judgments. Since our similarity metric,
+like the geometric baselines, is a linear (Euclidean) distance, we then train linear mappings from each
+encoder's embeddings to per-frame pose and ask how directly kinematic information is accessible to that
+metric. For the action with the greatest variation in perceptual alignment across encoders, stronger
+alignment relates to poorer linear pose recovery, though a nonlinear probe confirms that the pose
+information is still present. Our results show that perceptually relevant structure is learnable while
+remaining unexplained by reconstruction fidelity, by linearly accessible per-frame kinematics, or by
+semantic supervision alone, leaving open what structure a perceptually aligned representation should
+capture.
 \end{abstract}
-
-\keywords{motion similarity, self-supervised learning, perceptual similarity, Laban Movement
-Analysis, masked motion prediction}
-
-\maketitle
 
 % =====================================================================
 \section{Introduction}
@@ -67,17 +54,14 @@ Analysis, masked motion prediction}
 \subsection{Motion similarity and geometric distances as measures of similarity}
 Quantifying how {similar} two human movements are is foundational to motion retrieval,
 synthesis, style transfer, and the perceptual study of movement. The dominant approaches are
-geometric distances computed on raw kinematic features:
-
-\begin{itemize}
-\item {Rotation geodesic distance}---the distance on the rotation group $SO(3)$ between
-corresponding joint orientations, aggregated over joints and time. It respects the manifold
-structure of rotations but assumes (after temporal alignment) frame-wise correspondence.
-\item {Dynamic Time Warping (DTW)}---a non-linear temporal alignment that factors out
-speed variation and emphasizes the {shape} and {progression} of a gesture. DTW is the
-most widely adopted geometric framework for time-series motion comparison precisely because it
-models the temporal structure to which human observers are sensitive.
-\end{itemize}
+geometric distances computed on raw kinematic features. The rotation geodesic distance measures the
+distance on the rotation group $SO(3)$ between corresponding joint orientations, aggregated over
+joints and time; it respects the manifold structure of rotations but assumes (after temporal
+alignment) frame-wise correspondence. Dynamic Time Warping (DTW) instead applies a non-linear
+temporal alignment that factors out speed variation and emphasizes the {shape} and
+{progression} of a gesture, and it is the most widely adopted geometric framework for time-series
+motion comparison precisely because it models the temporal structure to which human observers are
+sensitive.
 
 Though strong, well-motivated baselines, the scientific question is whether a {learned}
 motion representation can predict human perceptual judgments better than they do.
@@ -87,8 +71,8 @@ motion representation can predict human perceptual judgments better than they do
 \item A {single self-supervised motion encoder (MAMP+pose)} whose {raw,
 unsupervised} embedding distances beat both geometric baselines (DTW, rotation geodesic)
 {and a generic learned (reconstruction-only SSL) motion encoder} on human-perceptual
-similarity across all three action types---including the expressively sparse pointing
-action---when evaluated on motion clips held out of pretraining, under a repeated, leakage-clean
+similarity across all three action types, including the expressively sparse pointing
+action, when evaluated on motion clips held out of pretraining, under a repeated, leakage-clean
 nested cross-validation with all baselines re-evaluated on the identical folds. The learned
 baseline shows that {merely} learning a motion representation is insufficient as it does not
 uniformly beat geometry; the composition is what wins all three. To our knowledge this is the
@@ -101,19 +85,95 @@ specialist that collapses on walking and pointing); and only composing the two y
 competitive across walking, pointing, and picking. Each step's result motivates the next design
 choice, evidence-first.
 \item A demonstration that the human ratings are productively used by {fine-tuning the
-encoder} under a perceptual objective derived from the comparison study---an {anchored
+encoder} under a perceptual objective derived from the comparison study, an {anchored
 ranking loss whose margin is the human dissimilarity gap itself} (hyperparameter-free and
 metric-aligned), which further improves held-out alignment on all three actions.
 \item A {methodological contribution}: a repeated, leakage-clean nested cross-validation
-protocol---with baselines re-evaluated on the identical folds---needed to make reliable,
+protocol (with baselines re-evaluated on the identical folds) needed to make reliable,
 reproducible perceptual-similarity claims on a small, high-variance human-rating set, and a
 characterization of the single-split pitfalls it corrects.
 \end{enumerate}
 
 % =====================================================================
+\section{Related Work}
+\label{sec:related}
+% -------------------------------------------------------------------
+% DRAFT (2026-07-25): four non-LMA buckets have first-pass prose (assistant-written from
+% the project + cited papers). The perception/LMA bucket is a stub for Prof. Durup{\i}nar.
+% TODO(Funda) markers flag the external prior work still to be added -- please supply those
+% citations (do NOT trust any bibkey not already in references.bib; none were invented).
+% Target ~1 column total. Delete these comment lines before camera-ready.
+% -------------------------------------------------------------------
+
+\paragraph{Human perception of movement and expressive qualities.}
+Our target is not a geometric quantity but a \emph{perceptual} one: how similar two movements appear
+to human observers. The stimuli are organized by Laban Movement Analysis (LMA), which decomposes the
+expressive quality of a movement into bipolar \emph{effort} factors; we sample combinations of these
+factors and collect pairwise human similarity judgments as ground truth (Section~\ref{sec:stimulus}).
+% TODO(Funda): cite the LMA / effort-quality literature (Laban; computational LMA / effort
+% recognition), prior perceptual-similarity and motion-perception studies, and work relating
+% movement features to affect/style perception. Anchor \citep{laban1971effort} is in the .bib;
+% please add the specific perception + computational-LMA references you rely on.
+\emph{[Stub --- perceptual studies of motion + LMA effort qualities; external citations TODO(Funda).]}
+
+\paragraph{Geometric and alignment-based motion similarity.}
+The classical way to compare two motions is a distance in pose space. Dynamic time warping (DTW)
+aligns sequences of differing length and rate before accumulating a per-frame cost, and remains a
+strong, widely used motion-similarity and retrieval baseline; joint-space and quaternion-geodesic
+distances measure configuration differences directly on the skeleton. We adopt both as baselines
+(Section~\ref{sec:baselines}): a variable-length DTW with a Euclidean local cost, and a DTW-aligned quaternion
+geodesic $2\arccos(|\langle q_1,q_2\rangle|)$ over the $28$ articulated joints. These measures are
+faithful to \emph{kinematic} difference but agnostic to which differences humans find perceptually
+salient, and, as our results show, they are least discriminative on the kinematically sparse
+pointing action.
+% TODO(Funda): add 1--2 canonical DTW-for-motion / motion-retrieval citations and, if desired, an
+% MPJPE-style pose-distance reference.
+
+\paragraph{Self-supervised and masked motion representation learning.}
+Rather than hand-designing a distance, one can learn a motion representation and measure distance in
+its embedding space. Two self-supervised objectives anchor our study. Masked motion prediction
+(MAMP)~\citep{mao2023mamp} masks a large fraction of spatio-temporal motion tokens and trains the
+model to predict the \emph{motion} of the hidden joints, yielding representations that transfer well
+to downstream action tasks; we use its masked-prediction objective as the dynamics-modeling component
+of our encoder. Motion Latent Diffusion (MLD)~\citep{chen2023mld} provides a transformer autoencoder
+with U-Net-like long skip connections (the ``SkipTransformer''), trained for reconstruction as the
+autoencoding stage of a latent motion-diffusion pipeline; we use it as a reconstruction-based encoder.
+Our contribution here is not either objective in isolation but the finding that only their
+\emph{composition}---masked-motion prediction plus an auxiliary pose-reconstruction head---aligns with
+perception across heterogeneous actions, and that this alignment is not explained by which encoder
+reconstructs motion most faithfully.
+% TODO(Funda): optionally add broader skeleton/video masked-autoencoder or motion-pretraining
+% references to situate MAMP/MLD among self-supervised motion encoders.
+
+\paragraph{Text-conditioned and contrastive motion representations.}
+A different route supplies \emph{semantic} supervision. TMR~\citep{petrovich2023tmr} learns a joint
+text--motion embedding by contrastive alignment on the HumanML3D corpus~\citep{guo2022humanml3d},
+producing a representation shaped by language rather than by motion statistics or by human
+similarity judgments. We use TMR as a supervised comparator representing the opposite supervision
+regime to ours (Section~\ref{sec:tmr}). This lets us ask whether large-scale semantic supervision or a light,
+task-aligned perceptual signal better predicts perceptual similarity; we find the answer is
+action-dependent, with semantic supervision most valuable on the least kinematically expressive
+action.
+% TODO(Funda): optionally add text-to-motion generation / motion-retrieval context around TMR.
+
+\paragraph{Probing what representations encode.}
+To interpret \emph{why} some encoders align better with perception, we use probing: training simple
+readout models to recover a target attribute from a frozen embedding, with the readout's accuracy
+taken as a measure of how accessibly that attribute is encoded. Because our similarity metric is a
+linear (Euclidean) distance, we probe with \emph{linear} readouts of per-frame pose, and contrast
+them with nonlinear readouts to separate ``absent'' from ``linearly inaccessible'' information. This
+supports our central dissociation (Section~\ref{sec:dissociation}): the best-aligned encoder makes
+per-frame pose the \emph{least} linearly recoverable, though a nonlinear probe confirms the pose is
+still present.
+% TODO(Funda): cite representative probing / linear-decodability / representation-analysis work
+% (e.g. probing classifiers in representation learning) to ground the method.
+
+% =====================================================================
 \section{Data corpus}
+\label{sec:data}
 
 \subsection{Stimulus space: Laban effort tuples}
+\label{sec:stimulus}
 Stimuli are motion-capture performances parameterized by Laban Movement Analysis (LMA)
 {effort tuples} $(e_1, e_2, e_3, e_4) \in \{-1, 0, +1\}^4$, encoding the four Laban
 effort dimensions (Space, Time, Weight, Flow). Following established LMA semantics, the number
@@ -123,11 +183,12 @@ full-effort tuples are rare in natural motion and are excluded.
 
 The perceptual study uses the {neutral + state + drive} subset: {57 effort classes
 per action} ($1$ neutral $+ 24$ states $+ 32$ drives), performed for three action
-types---{walking, pointing, picking}---for a total of 171 effort-class stimuli. Each
+types ({walking, pointing, picking}) for a total of 171 effort-class stimuli. Each
 performance additionally has a left/right-mirrored twin; the LMA states/drives clips excluded
 from encoder pretraining (Section 2.3) comprise $57 \times 3 \times 2 = 342$ clips.
 
 \subsection{Motion representation}
+\label{sec:motionrep}
 Each clip is converted to a per-frame feature of {34 joints $\times$ 6-D rotation
 representation}: joint index 0 carries the root position/orientation, indices 1--33 carry 6-D
 continuous joint rotations. The 6-D representation (Gram--Schmidt-recoverable to $SO(3)$) is
@@ -142,48 +203,49 @@ so no evaluation-clip information enters the normalization.
 seconds at 30\,fps). Each clip is mapped to this length deterministically: clips longer than 120
 frames are truncated to their first 120 frames; shorter clips are {right-padded by
 repeating their final frame}. This identical rule is applied in pretraining, in embedding
-extraction, and in held-out encoding---there is no length-dependent branching between train and
+extraction, and in held-out encoding; there is no length-dependent branching between train and
 test. (The geometric baselines of Section 5.2, by contrast, operate on the {raw, unpadded}
 sequences.)
 
 {Clip-length heterogeneity.} Walking and picking clips are long (median 73 and 71 frames;
 up to 137), whereas pointing clips are markedly shorter (median 53 frames; max 100). Because
 short clips are tail-padded, pointing clips contribute the largest fraction of repeated,
-frozen-pose frames under the 120-frame window---a consequence of their brevity that connects to
+frozen-pose frames under the 120-frame window, a consequence of their brevity that connects to
 their limited kinematic expressiveness (Section 3).
 
 \subsection{Pretraining corpus (self-supervised encoder)}
+\label{sec:corpus}
 The encoder is pretrained self-supervised on a broad, heterogeneous motion corpus of
 {5{,}795 BVH clips} drawn from three sources: the LMA effort performances (433 clips,
-including the eval actions); the Bandai-Namco Research Motion Dataset [Kobayashi et al., 2023]
+including the eval actions); the Bandai-Namco Research Motion Dataset~\citep{kobayashi2023bandai}
 (3{,}077 clips of professionally captured everyday actions in multiple expressive styles); and
-the CMU Graphics Lab Motion Capture Database (2{,}285 general-purpose performances).
+the CMU Graphics Lab Motion Capture Database~\citep{cmumocap} (2{,}285 general-purpose performances).
 
 {A single common skeleton.} The three sources were originally captured with different
 marker sets, joint hierarchies, frame rates, and file conventions. A substantial preprocessing
-effort retargeted {all} sources onto one canonical skeleton---the {CMU joint
-hierarchy}---and re-expressed every clip as a uniform BVH file at a common {30\,fps}. This
+effort retargeted {all} sources onto one canonical skeleton (the {CMU joint
+hierarchy}) and re-expressed every clip as a uniform BVH file at a common {30\,fps}. This
 retargeting is what makes the corpus trainable by a single encoder: every clip yields the
 identical {34-joint $\times$ 6-D rotation} per-frame feature (Section 2.2), regardless of
 source.
 
 {Held-out construction.} To guarantee a {strict held-out evaluation}, all 342 LMA
-neutral/state/drive clips (mirror twins included)---exactly the clips on which perceptual
-similarity is evaluated---are excluded from pretraining (and from the encoder's own validation),
+neutral/state/drive clips (mirror twins included), exactly the clips on which perceptual
+similarity is evaluated, are excluded from pretraining (and from the encoder's own validation),
 leaving $\sim$5{,}453 training clips. The encoder therefore never observes any evaluation
 stimulus during representation learning. For the corpus-fair comparison against TMR (Section
 6.3), we additionally train a {corpus-matched} MAMP+pose on a $14{,}143$-clip subset of AMASS
-(spanning KIT, BioMotionLab, CMU, ACCAD, MPI and other AMASS constituents, retargeted to our
-common skeleton). This matches the budget of the $\sim$14.6k-motion HumanML3D corpus on which TMR
-is trained. HumanML3D is itself drawn predominantly from AMASS ($\approx$92\%, the remainder from
+(spanning KIT, BioMotionLab, CMU, ACCAD, MPI and other AMASS~\citep{mahmood2019amass} constituents,
+retargeted to our common skeleton). This matches the budget of the $\sim$14.6k-motion HumanML3D
+corpus~\citep{guo2022humanml3d} on which TMR is trained. HumanML3D is itself drawn predominantly from AMASS ($\approx$92\%, the remainder from
 HumanAct12), so the two encoders are trained at a matched budget from a largely shared motion
 source; our subset is AMASS-only and does not include the small HumanAct12 portion. This corpus
 is likewise leakage-clean: it contains none of the LMA evaluation clips.
 
 \subsection{Human perceptual ratings (ground truth)}
 Similarity ratings were collected via {triplet (2-of-3) comparison trials}. In each trial
-a participant viewed three motions---{Left (0)}, {Neutral (1)}, {Right
-(2)}---and selected the two judged most similar. The dataset comprises {1{,}540 triplet
+a participant viewed three motions ({Left (0)}, {Neutral (1)}, {Right
+(2)}) and selected the two judged most similar. The dataset comprises {1{,}540 triplet
 trials per action} (one per distinct non-neutral effort pair, with the neutral as the third
 item), each rated by a {median of 11 participants} (range 10--18); presentation order was
 randomized. The three pairings $\{(0,1),(0,2),(1,2)\}$ of a given triplet received normalized
@@ -205,14 +267,14 @@ For each non-neutral effort pair we define the perceptual {dissimilarity} as
 \]
 A pair almost always grouped together ($c(0,2)\to 1$) has $d_{\text{perc}}\to 0$; a pair almost
 never grouped together has $d_{\text{perc}}\to 1$. {$d_{\text{perc}}$ is the single
-ground-truth quantity against which every distance measure---the learned embedding distances and
-both geometric baselines---is correlated} (Section 5.2). It uses only the absolute Left--Right
+ground-truth quantity against which every distance measure (the learned embedding distances and
+both geometric baselines) is correlated} (Section 5.2). It uses only the absolute Left--Right
 frequency and no triplet-internal contrasts, so it is method-agnostic.
 
 \subsubsection{Perceptual training signals}
-The perceptual fine-tuning of Section 6.4 requires a per-pair supervisory signal derived from the
+The perceptual fine-tuning of Section~\ref{sec:finetune} requires a per-pair supervisory signal derived from the
 triplets. The {reported method trains on the ordinal $d_{\text{perc}}$ relation} via a
-ranking loss; a finer, neutral-referenced construction---the {dynamic alpha}---is one of
+ranking loss; a finer, neutral-referenced construction, the {dynamic alpha}, is one of
 the tested alternatives, defined here. Per non-neutral effort pair we generate two directed
 Left--Right alphas contrasting the direct Left--Right frequency against each neutral-mediated
 alternative:
@@ -222,7 +284,7 @@ alternative:
 \]
 Each alpha lies in $[-1,+1]$; a positive alpha is evidence the pair should sit {close} in
 embedding space, a negative alpha that it should sit {far}. These alphas are used only by
-the neutral-anchored {alternative} arms, which Section 6.4 finds do not generalize. A note
+the neutral-anchored {alternative} arms, which Section~\ref{sec:finetune} finds do not generalize. A note
 on hygiene: the reported ranking method supervises on the {ordinal relation} induced by
 $d_{\text{perc}}$, while evaluation scores the Spearman correlation between embedding distances
 and $d_{\text{perc}}$ on the held-out test fold; because train, selection, and test folds are
@@ -231,11 +293,13 @@ disjoint (Section 5.2), no class's rating is ever both a training target and its
 \subsection{Metric of merit}
 The ground truth is {ordinal} by construction (a ranking induced by choice frequencies)
 and the learned metric optimizes ordinal triplet inequalities; {Spearman rank correlation
-is the primary metric.} Pearson is reported as a magnitude-alignment supplement.
+is the primary metric.} Pearson correlation is reported as a magnitude-alignment supplement in
+Appendix~\ref{app:pearson}; it yields the same encoder ordering and does not change any conclusion.
 
 % =====================================================================
 \section{Per-action motion structure}
-The three actions differ markedly in {kinematic expressiveness}---how much of the body
+\label{sec:peraction}
+The three actions differ markedly in {kinematic expressiveness}, in how much of the body
 moves, over how large a range, and over how long. We quantify this from the motion data,
 averaging per-effort-class statistics over the 57 classes of each action ($28$ articulated
 joints; a joint counts as \emph{active} in a clip when its across-frame variability exceeds a
@@ -244,15 +308,17 @@ small fixed threshold).
 \begin{table}[h]
 \centering
 \caption{Per-action kinematic descriptors (mean over the 57 effort classes). Active-joint
-fraction and temporal variability are reported as approximate, threshold-robust ranges; median
-clip length is exact.}
+fraction and temporal variability are approximate, threshold-robust ranges; median clip length
+is exact.}
+\setlength{\tabcolsep}{4pt}
+\small
 \begin{tabular}{lccc}
 \toprule
 Descriptor & Walking & Pointing & Picking \\
 \midrule
-Active-joint fraction (of 28) & $\sim$0.9 & $\mathbf{\sim}$\textbf{0.55} & $\sim$0.7 \\
-Relative temporal variability & high & \textbf{$\approx$ half} & high \\
-Median clip length (frames)   & 73 & \textbf{53} & 71 \\
+Active-joint fraction & $\sim$0.9 & $\mathbf{\sim 0.55}$ & $\sim$0.7 \\
+Temporal variability & high & \textbf{$\approx$ half} & high \\
+Median length (frames) & 73 & \textbf{53} & 71 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -277,9 +343,9 @@ baselines; we find that with the right pretraining objective it is.
 \section{Encoder design---a progressive ablation toward MAMP+pose}
 The encoder design was not chosen a priori; it is the endpoint of a sequence of controlled
 training runs, each motivated by the failure of the previous. We present that sequence because it
-establishes the central {two-capability composition} finding---that perceptual similarity
+establishes the central {two-capability composition} finding (that perceptual similarity
 across heterogeneous actions requires an encoder modeling {both} motion dynamics and static
-pose configuration---and rules out the obvious single-objective alternatives.
+pose configuration) and rules out the obvious single-objective alternatives.
 
 We evaluate every encoder identically: pool its output to one vector per clip, take L2 distances
 between clips, and correlate against $d_{\text{perc}}$ under the repeated, leakage-clean nested
@@ -289,18 +355,23 @@ epoch is an inner-loop hyperparameter: a candidate checkpoint is taken on a {uni
 100-epoch grid across the model's full trajectory}, the checkpoint maximizing raw perceptual
 Spearman on the disjoint inner validation fold is chosen, and only then is it scored on the
 untouched TEST fold. The grid is identical for every model, removing checkpoint-selection as a
-researcher degree of freedom. Encoders differ along two axes we deliberately separate---the
+researcher degree of freedom. Encoders differ along two axes we deliberately separate, the
 {autoencoder backbone} (Section 4.1) and the {training objective} (Sections
 4.2--4.3).
 
 \subsection{Step 1---backbone: the MLD SkipTransformer over a plain transformer}
+\label{sec:step1}
 We consider two transformer-autoencoder backbones for the reconstruction encoders: a
 {plain transformer autoencoder} (a standard encoder/decoder with a compressed latent
-bottleneck) and the {MLD-style transformer autoencoder} of Motion Latent Diffusion [Chen
-et al., CVPR 2023]---a transformer encoder/decoder with {U-Net-like long skip connections}
-(``SkipTransformer''), symmetric long-range links from each early encoder layer to the matching
-late decoder layer. The skips carry high-frequency per-frame detail forward that the plain
-bottleneck discards. Holding the {objective} fixed (reconstruction-only) and varying
+bottleneck) and the {MLD-style transformer autoencoder} of Motion Latent Diffusion~\citep{chen2023mld}, a
+transformer encoder/decoder with {U-Net-like long skip connections}
+(``SkipTransformer''). These skips are \emph{internal} to each transformer stack:
+symmetric long-range links from early to matching late layers \emph{within} the encoder (and,
+separately, within the decoder), following the SkipTransformer's input/middle/output-block
+structure. They do \emph{not} cross the latent bottleneck; the encoder and decoder communicate
+only through the compact latent $z$. Their effect is to let a stack's later layers re-access
+early-layer, high-frequency per-frame detail that a plain feed-forward stack tends to wash out
+as it abstracts. Holding the {objective} fixed (reconstruction-only) and varying
 {only} the architecture:
 
 \begin{table}[h]
@@ -312,15 +383,21 @@ bottleneck discards. Holding the {objective} fixed (reconstruction-only) and var
 \toprule
 Encoder & Walking & Pointing & Picking \\
 \midrule
-Plain transformer AE          & $+0.476 \pm 0.031$ & $+0.213 \pm 0.034$ & $+0.491 \pm 0.029$ \\
-{MLD SkipTransformer AE} & $\mathbf{+0.532 \pm 0.023}$ & $\mathbf{+0.331 \pm 0.039}$ & $\mathbf{+0.498 \pm 0.029}$ \\
+Plain transformer AE          & $.476{\scriptstyle\pm}.031$ & $.213{\scriptstyle\pm}.034$ & $.491{\scriptstyle\pm}.029$ \\
+{MLD SkipTransformer AE} & $\mathbf{.532{\scriptstyle\pm}.023}$ & $\mathbf{.331{\scriptstyle\pm}.039}$ & $\mathbf{.498{\scriptstyle\pm}.029}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 The MLD SkipTransformer wins on {all three actions at the same objective}, decisively on
-pointing ($+0.118$), consistent with the skips preserving high-frequency pose detail that the
-plain bottleneck discards.
+pointing ($+0.118$). It is tempting to credit the U-Net skip connections (the salient architectural
+difference from the plain transformer) for this gap, but a direct ablation refutes that reading:
+toggling encoder skips on the plain reconstruction transformer moves pointing by only $+0.008$
+($.213\!\to\!.221$), and removing the skips from the MLD encoder changes it by $-0.001$, both within
+noise (Section~\ref{sec:skip-ablation}). The skip connections themselves are perceptually
+{inert}; the $+0.118$ advantage is a property of the MLD recipe as a whole (its block structure,
+normalization, and pooling), not of the skips in isolation. We return to this in
+Section~\ref{sec:skip-ablation}.
 
 {Deterministic vs.\ variational.} We use the {deterministic} MLD autoencoder rather
 than its variational form (MLD-VAE) on principled grounds, not performance: a VAE adds a KL term
@@ -345,25 +422,25 @@ factorial}: each loss term is on (unit weight) or off, on {both} backbones.
 Encoder (objective) & Walking & Pointing & Picking \\
 \midrule
 \multicolumn{4}{l}{{Plain transformer}} \\
-\quad reconstruction-only & $+0.476 \pm 0.031$ & $+0.213 \pm 0.034$ & $+0.491 \pm 0.029$ \\
-\quad reconstruction $+$ vel & $+0.472 \pm 0.026$ & $+0.205 \pm 0.039$ & $+0.399 \pm 0.037$ \\
-\quad velocity-only & $+0.321 \pm 0.033$ & $+0.362 \pm 0.036$ & $+0.471 \pm 0.033$ \\
+\quad reconstruction-only & $.476{\scriptstyle\pm}.031$ & $.213{\scriptstyle\pm}.034$ & $.491{\scriptstyle\pm}.029$ \\
+\quad reconstruction $+$ vel & $.472{\scriptstyle\pm}.026$ & $.205{\scriptstyle\pm}.039$ & $.399{\scriptstyle\pm}.037$ \\
+\quad velocity-only & $.321{\scriptstyle\pm}.033$ & $.362{\scriptstyle\pm}.036$ & $.471{\scriptstyle\pm}.033$ \\
 \multicolumn{4}{l}{{MLD SkipTransformer}} \\
-\quad reconstruction-only & $+0.532 \pm 0.023$ & $+0.331 \pm 0.039$ & $+0.498 \pm 0.029$ \\
-\quad reconstruction $+$ vel & $+0.537 \pm 0.022$ & $+0.339 \pm 0.035$ & $+0.493 \pm 0.030$ \\
-\quad velocity-only & $+0.451 \pm 0.031$ & $+0.278 \pm 0.031$ & $+0.254 \pm 0.039$ \\
+\quad reconstruction-only & $.532{\scriptstyle\pm}.023$ & $.331{\scriptstyle\pm}.039$ & $.498{\scriptstyle\pm}.029$ \\
+\quad reconstruction $+$ vel & $.537{\scriptstyle\pm}.022$ & $.339{\scriptstyle\pm}.035$ & $.493{\scriptstyle\pm}.030$ \\
+\quad velocity-only & $.451{\scriptstyle\pm}.031$ & $.278{\scriptstyle\pm}.031$ & $.254{\scriptstyle\pm}.039$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Three results. {(1) Adding a velocity term to reconstruction changes almost nothing}---flat
+Three results. {(1) Adding a velocity term to reconstruction changes almost nothing}, flat
 within noise on MLD, flat-to-worse on the plain transformer; on neither backbone does it move
 pointing across the $+0.370$ bar. {(2) Velocity-only is a weaker objective overall and
-reshapes {which} action is served}---with reconstruction removed, global quality drops (MLD
+reshapes {which} action is served}, with reconstruction removed, global quality drops (MLD
 picking collapses $+0.498 \to +0.254$). {(3) The telling signal:} velocity-only is the
 only reconstruction-family cell that lifts plain-transformer pointing, and it lifts it markedly
-($+0.213 \to +0.362$), while degrading walking. We are careful about what this licenses---it does
-not tell us where pointing's perceptual signal physically resides---but it does establish that a
+($+0.213 \to +0.362$), while degrading walking. We are careful about what this licenses (it does
+not tell us where pointing's perceptual signal physically resides), but it does establish that a
 purely temporal target carries perceptual signal a pose target does not surface, a first
 indication that {dynamics information is perceptually relevant} and under-exploited by
 reconstruction. Yet velocity as an added {loss} cannot capitalize on it (result 1). The
@@ -373,15 +450,16 @@ to a task that {forces} dynamics into the representation.
 \subsection{Step 3---why a velocity loss cannot supply dynamics}
 A velocity loss on a visible reconstruction is {partly redundant}. A reconstruction
 autoencoder sees the entire clip and is rewarded for reproducing every frame; if it reconstructs
-the poses $x_t$ accurately, the frame-to-frame differences $x_{t+1}-x_t$---the velocities---are
+the poses $x_t$ accurately, the frame-to-frame differences $x_{t+1}-x_t$ (the velocities) are
 reproduced automatically. A velocity term is therefore largely already satisfied and supplies
 little additional gradient. This predicts precisely what the factorial shows. The lesson that
 carries forward: {dynamics must be forced into the representation by the learning task
-itself}---by making the model {predict} motion it cannot see---not appended as a loss term
+itself}, by making the model {predict} motion it cannot see, not appended as a loss term
 on a fully-visible reconstruction.
 
 \subsection{Step 4---masked motion {prediction}, not reconstruction}
-The resolution comes from the Masked Motion Prediction (MAMP) framework [Mao et al., ICCV 2023].
+\label{sec:step4}
+The resolution comes from the Masked Motion Prediction (MAMP) framework~\citep{mao2023mamp}.
 Rather than reconstructing visible poses, MAMP {masks $\sim$80\% of spatio-temporal
 patches and predicts the {motion} (temporal deltas) of the masked regions} from sparse
 visible context, with a motion-magnitude prior biasing masking toward dynamically rich regions.
@@ -389,24 +467,25 @@ This imposes genuine dynamics-modeling pressure: the encoder cannot copy what it
 
 {MAMP alone is a dynamics specialist.} The motion-only MAMP encoder's single strong action
 is picking ($+0.490$ raw, the one bar it clears), while it is weak on walking ($+0.351$) and
-pointing ($+0.299$). What is solid---and load-bearing---is the {empirical complementarity}
+pointing ($+0.299$). What is solid, and load-bearing, is the {empirical complementarity}
 between the two objectives: masked-motion prediction succeeds on exactly the action (picking)
 where reconstruction was weakest, and fails on exactly the actions (walking, pointing) where
 reconstruction was strongest. Neither objective alone serves all three, which motivates
 {composing} them.
 
 \subsubsection{Pretraining budget and the pretext-vs-downstream divergence}
+\label{sec:budget}
 We adopt the original MAMP pretraining hyperparameters and pretrain to convergence of the
 self-supervised loss, saving the full checkpoint trajectory; the reported epoch is selected per
 fold on the inner validation fold over the uniform 100-epoch grid. For the MAMP family this
-consistently selects an {early} checkpoint---the held-out perceptual signal rises quickly
-and plateaus by a few hundred epochs while the self-supervised loss keeps descending---a concrete
+consistently selects an {early} checkpoint (the held-out perceptual signal rises quickly
+and plateaus by a few hundred epochs while the self-supervised loss keeps descending), a concrete
 instance of the pretext-vs-downstream divergence. Selection is leakage-clean (the validation fold picks;
 TEST fold reports).
 
 \subsection{Step 5---the pose augmentation (MAMP+pose)}
 Masked motion prediction supplies dynamics but discards the static-configuration fidelity that
-reconstruction recovered---and with it walking and pointing. We augment it with an
+reconstruction recovered, and with it walking and pointing. We augment it with an
 {auxiliary pose-reconstruction objective}. In standard MAMP a single linear head maps each
 masked patch's decoder feature to its {motion} target (the temporal delta $x_{t+s}-x_t$);
 we add a {second, parallel linear head} off the {same} decoder features mapping each
@@ -416,16 +495,17 @@ $\lambda_{\text{pose}}=1.0$. Because both heads read the same decoder features a
 into the same encoder, the encoder is pressured to produce one latent that simultaneously encodes
 how the body is {moving} (the dynamics that win picking) and how it is {configured} (the
 static fidelity walking and pointing depend on). Two parallel heads (rather than summing targets)
-let each target be predicted in its natural form---a temporal delta and an absolute pose live on
-different scales---while sharing all representation-bearing layers. Section 6.5 shows this
+let each target be predicted in its natural form (a temporal delta and an absolute pose live on
+different scales) while sharing all representation-bearing layers. Section~\ref{sec:sweep} shows this
 composition rescues walking and pointing while retaining picking.
 
 % =====================================================================
 \section{The perceptual inference pipeline}
+\label{sec:pipeline}
 
 \subsection{Raw-embedding regime (unsupervised)}
 A clip is mapped to the fixed 120-frame window, standardized, and patchified into spatio-temporal
-patches---one patch per (4-frame block $\times$ joint), giving $30 \times 34 = 1020$ patches. The
+patches, one patch per (4-frame block $\times$ joint), giving $30 \times 34 = 1020$ patches. The
 pretrained encoder (run with mask ratio 0, all patches visible) produces a 256-D feature per
 patch; we mean-pool to a single {256-D clip embedding} (the encoder-native linear-probe
 readout). Pairwise {Euclidean (L2) distances} between clip embeddings are correlated
@@ -434,6 +514,7 @@ human ratings} during representation learning and therefore measures the encoder
 perceptual alignment.
 
 \subsection{Evaluation protocol and baselines}
+\label{sec:baselines}
 {Repeated, leakage-clean nested cross-validation.} All reported correlations are the mean
 over {5 repeats $\times$ 5 outer folds ($n=25$)}. Effort classes are partitioned
 (magnitude-stratified) into 5 folds with a repeat-specific seed. For each outer fold: the fold is
@@ -454,15 +535,15 @@ claim.
 {Baselines on identical folds.} Both geometric baselines are computed on the {raw,
 unpadded} motion features over the {same 25 test folds} and correlated against the same
 $d_{\text{perc}}$. A representational note: the geometric baselines operate on the native
-motion-capture rotation representation---per joint a unit \emph{quaternion} ($28$ joints
-$\times\,4 = 112$ channels per frame)---whereas the learned encoder consumes the 6-D continuous
-rotation features of Section~2.2; each representation is the natural one for its method, and both
+motion-capture rotation representation (per joint a unit \emph{quaternion}, $28$ joints
+$\times\,4 = 112$ channels per frame) whereas the learned encoder consumes the 6-D continuous
+rotation features of Section~\ref{sec:motionrep}; each representation is the natural one for its method, and both
 describe the same underlying joint rotations.
 
 Both baselines use Dynamic Time Warping for temporal alignment but differ in the per-frame local
 cost. The \textbf{DTW} baseline uses a \textbf{Euclidean} per-frame cost between the (flattened)
 quaternion feature vectors, and reports the length-normalized accumulated cost of the optimal
-monotone alignment---so it compares the two motions' shape and progression while absorbing
+monotone alignment, so it compares the two motions' shape and progression while absorbing
 differences in speed and duration. The \textbf{geodesic} baseline replaces the Euclidean local
 cost with a \textbf{quaternion geodesic}: for two frames with per-joint unit quaternions $q_1, q_2$,
 the frame cost is the mean over joints of $2\arccos(|\langle q_1, q_2\rangle|)$ (the geodesic angle
@@ -486,45 +567,54 @@ the same way.
 \centering
 \setlength{\tabcolsep}{1pt}
 \small
-\caption{Raw MAMP+pose vs.\ geometric and learned baselines ($n=25$, mean $\pm$ SE).}
+\caption{Raw MAMP+pose vs.\ geometric and learned baselines ($n=25$, mean $\pm$ SE). This is the
+full-corpus MAMP+pose; the TMR comparison (Section~\ref{sec:tmr}) instead uses the corpus-matched variant
+(Section~\ref{sec:corpus}), which posts lower absolute scores, so the two headline numbers differ by design.}
 \begin{tabular}{lccc}
 \toprule
 Method & Walking & Pointing & Picking \\
 \midrule
-{MAMP+pose, raw} & $\mathbf{+0.552 \pm 0.026}$ & $\mathbf{+0.434 \pm 0.030}$ & $\mathbf{+0.543 \pm 0.033}$ \\
-DTW (geometric)        & $+0.490 \pm 0.028$ & $+0.273 \pm 0.039$ & $+0.303 \pm 0.038$ \\
-Geodesic (geometric)   & $+0.371 \pm 0.028$ & $+0.234 \pm 0.031$ & $+0.264 \pm 0.030$ \\
-Vanilla SSL (recon-only) & $+0.476 \pm 0.031$ & $+0.213 \pm 0.034$ & $+0.491 \pm 0.029$ \\
+{MAMP+pose, raw} & $\mathbf{.552{\scriptstyle\pm}.026}$ & $\mathbf{.434{\scriptstyle\pm}.030}$ & $\mathbf{.543{\scriptstyle\pm}.033}$ \\
+DTW (geometric)        & $.490{\scriptstyle\pm}.028$ & $.273{\scriptstyle\pm}.039$ & $.303{\scriptstyle\pm}.038$ \\
+Geodesic (geometric)   & $.371{\scriptstyle\pm}.028$ & $.234{\scriptstyle\pm}.031$ & $.264{\scriptstyle\pm}.030$ \\
+Vanilla SSL (recon-only) & $.476{\scriptstyle\pm}.031$ & $.213{\scriptstyle\pm}.034$ & $.491{\scriptstyle\pm}.029$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 On Spearman, the {raw, unsupervised MAMP+pose encoder beats both geometric baselines and
-the learned baseline on all three actions} under matched held-out evaluation---to our knowledge
-the first single encoder to do so. Treating each fold-difference as paired across the 25 matched
-folds, the pointing and picking advantages over the geometric baselines are large and
-well-separated from zero ($\approx$3--5$\sigma$ on a conservative independent-SEM test); the one
-near-marginal cell is walking vs.\ DTW ($+0.062$, $\approx$1.6$\sigma$), though walking clears
-geodesic by a wide margin. The all-three result is a property of the raw encoder geometry and does
-not require any learned metric refinement.
+the learned baseline on all three actions} under matched held-out evaluation, to our knowledge
+the first single encoder to do so. We test each advantage with a one-sided Wilcoxon signed-rank
+test over the $25$ matched TEST folds (pairing each fold-difference by its $(\text{repeat},
+\text{fold})$ index). Every one of the six cells against the geometric baselines is significant:
+against DTW, walking $p{=}.022$, pointing $p{=}.002$, picking $p{=}3.1{\times}10^{-5}$; against the
+quaternion-geodesic baseline, all three $p{<}10^{-4}$. The advantage over the learned (vanilla SSL)
+baseline is likewise significant on all three actions (walking $p{=}.004$, pointing
+$p{=}9.4{\times}10^{-6}$, picking $p{=}.005$). The weakest cell is walking vs.\ DTW ($p{=}.022$),
+significant at the $.05$ level; every other geometric-baseline cell survives Bonferroni correction
+across the six comparisons ($.05/6{=}.008$), and the pointing and picking advantages, the
+perceptually decisive axes, hold at $p{\le}.002$. The all-three result is thus a property of the
+raw encoder geometry and does not require any learned metric refinement.
 
 \subsection{The raw-encoder result---a stronger, unsupervised claim}
-The all-three win is achieved by the {raw} encoder embeddings---no perceptual supervision
+The all-three win is achieved by the {raw} encoder embeddings, with no perceptual supervision
 whatsoever. The perceptual-similarity structure is therefore {intrinsic to the
 self-supervised representation}, not imposed by a downstream metric. Beating a heavily-optimized
-temporal baseline like DTW with unsupervised embeddings---including on the expressively sparse
-pointing action, where DTW's time-warping was expected to dominate---indicates the masked-motion
+temporal baseline like DTW with unsupervised embeddings (including on the expressively sparse
+pointing action, where DTW's time-warping was expected to dominate) indicates the masked-motion
 pretext task, augmented with the pose head, genuinely captures the kinematic structure underlying
 human similarity judgments.
 
 \subsection{Comparison to a supervised learned representation (TMR)}
+\label{sec:tmr}
 A sterner test is a {purpose-built, supervised} motion representation. We compare against
-{TMR} [Petrovich et al., ICCV 2023], a text$\leftrightarrow$motion retrieval model trained
-with contrastive language supervision on HumanML3D---a representation shaped by a {large}
+{TMR}~\citep{petrovich2023tmr}, a text$\leftrightarrow$motion retrieval model trained
+with contrastive language supervision on HumanML3D, a representation shaped by a {large}
 corpus of semantic annotations, the opposite supervision regime to ours.
 
 {Protocol and a conservative handicap.} TMR consumes HumanML3D 263-D motion features, so we
-convert each rated clip from BVH to SMPL parameters (joints2smpl SMPLify fit, mean reconstruction
+convert each rated clip from BVH to SMPL~\citep{loper2015smpl} parameters (joints2smpl
+SMPLify~\citep{bogo2016smplify} fit, mean reconstruction
 error $\approx$4\,cm $\approx$2\% of body height) and then to the 263-D features TMR expects,
 encode through the released HumanML3D TMR motion encoder, and evaluate on the {identical 25
 nested-CV folds} and the same $d_{\text{perc}}$. The $\approx$4\,cm conversion perturbs TMR's input
@@ -533,40 +623,86 @@ comparison we use the corpus-matched MAMP+pose (Section 2.3) as the comparator.
 
 \begin{table}[h]
 \centering
-\caption{Corpus-matched MAMP+pose vs.\ TMR ($n=25$, mean $\pm$ SE).}
-\setlength{\tabcolsep}{1pt}
+\caption{Corpus-matched MAMP+pose vs.\ TMR ($n=25$, mean $\pm$ SE). Top block: perceptually
+unsupervised (raw). Bottom block: after both receive the {same} triplet-based perceptual
+fine-tuning. Bold marks the better encoder within each supervision regime, per action.}
+\setlength{\tabcolsep}{3pt}
 \small
 \begin{tabular}{lccc}
 \toprule
 Method & Walking & Pointing & Picking \\
 \midrule
-TMR (supervised, HumanML3D) & $+0.452 \pm 0.025$ & $\mathbf{+0.425 \pm 0.036}$ & $+0.408 \pm 0.029$ \\
-MAMP+pose (matched, raw)    & $+0.462 \pm 0.027$ & $+0.302 \pm 0.031$ & $+0.481 \pm 0.031$ \\
-{\ + ranking fine-tune} & $\mathbf{+0.699 \pm 0.022}$ & $\mathbf{+0.463 \pm 0.035}$ & $\mathbf{+0.605 \pm 0.031}$ \\
+\multicolumn{4}{l}{\emph{Perceptually unsupervised (raw)}} \\
+TMR (supervised)     & $.452{\scriptstyle\pm}.025$ & $\mathbf{.425{\scriptstyle\pm}.036}$ & $.408{\scriptstyle\pm}.029$ \\
+MAMP+pose (raw)      & $\mathbf{.462{\scriptstyle\pm}.027}$ & $.302{\scriptstyle\pm}.031$ & $\mathbf{.481{\scriptstyle\pm}.031}$ \\
+\midrule
+\multicolumn{4}{l}{\emph{After identical perceptual fine-tuning}} \\
+TMR $+$ ranking f.t.       & $.649{\scriptstyle\pm}.025$ & $\mathbf{.573{\scriptstyle\pm}.037}$ & $\mathbf{.611{\scriptstyle\pm}.035}$ \\
+MAMP+pose $+$ ranking f.t. & $\mathbf{.699{\scriptstyle\pm}.022}$ & $.463{\scriptstyle\pm}.035$ & $.605{\scriptstyle\pm}.031$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Two honest reads. {Raw}, the corpus-matched MAMP+pose beats TMR on walking and picking but
-{TMR is stronger on pointing} ($+0.425$ vs.\ $+0.302$)---the one action where abundant
-semantic supervision helps most, and where our raw encoder is weakest. TMR is the strongest
-pointing baseline in the entire study (far above DTW's $+0.273$) and, unlike the geometric
-baselines, does not collapse on pointing---it is roughly flat across actions, consistent with a
-semantically supervised representation capturing broad motion structure uniformly but not tuned to
-perceptual effort-similarity. {With the light ranking fine-tune (Section 6.4), MAMP+pose
-beats TMR on all three actions}, including pointing ($+0.463$ vs.\ $+0.425$), achieved with a far
-smaller supervision set ($\approx$1{,}540 within-task perceptual triplets per action) than TMR's
-corpus of semantic annotations. The finding is one of {alignment over abundance}: sparse
-supervision aligned to the target task matches or exceeds abundant supervision aligned to a
-different task. We state the pointing result precisely---TMR wins pointing on the raw encoder and
-is edged only after the perceptual fine-tune---rather than overclaiming a raw all-three win against
-this baseline.
+{The perceptually unsupervised comparison.} With neither representation given any perceptual
+supervision, the corpus-matched MAMP+pose significantly exceeds TMR on picking (two-sided paired
+Wilcoxon over the $25$ folds, $p{=}.011$), is statistically indistinguishable on walking ($p{=}.85$;
+$.462$ vs.\ $.452$), and is behind on pointing ($.302$ vs.\ $.425$, $p{=}.007$); {TMR is stronger
+on pointing}, the one action where abundant semantic supervision helps most and where our raw encoder
+is weakest. TMR is the strongest pointing baseline in the
+entire study (far above DTW's $+0.273$) and, unlike the geometric baselines, does not collapse on
+pointing, and is roughly flat across actions, consistent with a semantically supervised representation
+capturing broad motion structure uniformly. So a self-supervised encoder, with no perceptual signal,
+already matches or exceeds a large supervised representation on the two kinematically rich actions.
+
+{The matched (fine-tuned-vs-fine-tuned) comparison.} A natural objection is that the fine-tune is
+an unfair advantage unless TMR receives it too. We therefore give TMR the {identical} perceptual
+ranking fine-tune (the same objective, folds, and budget, $\approx$1{,}540 within-task triplets per
+action) back-propagated into TMR's own motion encoder. Under this matched protocol (bottom block),
+MAMP+pose significantly exceeds TMR on walking ($.699$ vs.\ $.649$, two-sided paired Wilcoxon
+$p{=}.026$) and is statistically tied on picking ($.605$ vs.\ $.611$, $p{=}.98$), but {TMR wins
+pointing} ($.573$ vs.\ $.463$, $p{=}.003$). The light perceptual budget helps {both} encoders
+substantially; when both receive it, the semantically pretrained representation is the stronger
+{pointing} perceiver. This is the honest result, and it is consistent with our broader finding: pointing
+is the communicative, configuration-sparse action for which large-scale semantic supervision is best
+suited, and it is precisely the action where perceptual alignment dissociates from linearly accessible
+pose (Section~\ref{sec:dissociation}). We do {not} claim to surpass a fine-tuned TMR on all three
+actions. We claim the more defensible and, we think, more informative result. A
+{self-supervised} encoder is competitive with a large {semantically supervised} one in both
+regimes, matching or exceeding it on the two kinematically rich actions (walking, picking) both raw
+and after matched light fine-tuning, with the single exception, pointing, falling exactly where
+semantic supervision is expected to help.
+Two factors make even this read conservative toward our method: TMR observes our motions only through
+a lossy BVH$\rightarrow$SMPL fit ($\approx$4\,cm MPJPE) whereas our encoders see native motion, and
+TMR carries orders of magnitude more pretraining supervision than our self-supervised objective.
+
+{Why semantic supervision helps most on pointing.} We read this as principled rather than
+incidental, following from the kinematic structure of Section~\ref{sec:peraction}. Pointing is by every measure the
+{least kinematically expressive} action, with only about half its joints moving meaningfully
+($\sim$$55\%$ vs.\ $\sim$$90\%$ walking, $\sim$$70\%$ picking) and its per-joint temporal variability
+is roughly half that of the other two. That same sparsity is what makes pointing hard for a
+{bottom-up} encoder (our hypothesis H1: fewer varying joints leave less motion structure from
+which to separate effort classes), and it is why our raw self-supervised encoder is weakest there. The
+pattern in the data is that {bottom-up} encoders, which read perceptual structure off motion
+statistics, degrade sharply on pointing. Every geometric baseline and every reconstruction encoder
+posts its lowest pointing score, and our raw encoder falls from $.481$--$.462$ on the rich actions to
+$.302$. TMR is the exception, with scores roughly {flat} across actions ($.452/.425/.408$), so on
+pointing it does not excel so much as avoid the collapse the others suffer. We read this as the more
+defensible interpretation, since semantic pretraining supplies structure that withstands kinematic
+sparsity, precisely the regime where motion-statistics signal is thinnest. On the kinematically rich
+walking and picking actions, where bottom-up signal is abundant, that advantage disappears and a
+self-supervised encoder matches or exceeds TMR. We further interpret, more tentatively, that pointing's
+communicative character is what keeps a language-supervised representation useful there, since its
+salient distinctions may be carried less by the magnitude of body motion than by what the gesture
+conveys. This interpretive step we do not test directly. What the data establish is the robustness
+pattern itself, which is consistent with the dissociation of Section~\ref{sec:dissociation}; on pointing,
+perceptual structure is carried by something other than linearly recoverable per-frame kinematics.
 
 \subsection{Perceptual fine-tuning: using the human ratings to improve the encoder}
+\label{sec:finetune}
 The raw encoder already wins. We now ask whether the small budget of human ratings can push it
 further. The productive way, we find, is to back-propagate a perceptual objective {into the
 encoder itself}, reshaping the representation so that embedding distances track human
-dissimilarity---rather than fitting a separate metric on a frozen embedding.
+dissimilarity, rather than fitting a separate metric on a frozen embedding.
 
 {An anchored ranking loss with a preference-scaled margin.} The ground truth
 $d_{\text{perc}}$ is {ordinal}, so the natural objective is a {ranking} loss. For an
@@ -581,7 +717,7 @@ i.e.\ the anchor--near distance must fall below the anchor--far distance by a ma
 {human dissimilarity gap} itself. Two properties make this the principled choice: the
 margin is {hyperparameter-free and adaptive} (confidently-ordered pairs are pushed apart
 harder than near-ties, with no margin constant to tune), and the loss is {metric-aligned by
-construction}---it optimizes the same ordinal quantity, over the same non-neutral pairs, that the
+construction}, since it optimizes the same ordinal quantity, over the same non-neutral pairs, that the
 Spearman evaluation scores.
 
 {Leakage-clean protocol and a single held-out selection.} Fine-tuning runs under the same
@@ -589,7 +725,7 @@ repeated nested-CV as the raw results; the only change is that within each fold'
 the MAMP+pose encoder is fine-tuned rather than frozen. Two design points make the reported numbers
 conservative. First, the base checkpoint is chosen {per fold on the validation fold only}.
 Second, we use a {single} held-out selection: rather than also early-stopping on the
-validation fold, we train a {fixed budget and report the final epoch}---removing any
+validation fold, we train a {fixed budget and report the final epoch}, removing any
 ``selection used twice'' concern by construction.
 
 \begin{table}[h]
@@ -601,33 +737,34 @@ validation fold, we train a {fixed budget and report the final epoch}---removing
 \toprule
 Method & Walking & Pointing & Picking \\
 \midrule
-raw MAMP+pose (no ratings) & $+0.462 \pm 0.027$ & $+0.302 \pm 0.031$ & $+0.481 \pm 0.031$ \\
-{\ + ranking fine-tune} & $\mathbf{+0.699 \pm 0.022}$ & $\mathbf{+0.463 \pm 0.035}$ & $\mathbf{+0.605 \pm 0.031}$ \\
+raw MAMP+pose (no ratings) & $.462{\scriptstyle\pm}.027$ & $.302{\scriptstyle\pm}.031$ & $.481{\scriptstyle\pm}.031$ \\
+{\ + ranking fine-tune} & $\mathbf{.699{\scriptstyle\pm}.022}$ & $\mathbf{.463{\scriptstyle\pm}.035}$ & $\mathbf{.605{\scriptstyle\pm}.031}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 The ranking fine-tune {lifts all three actions substantially} from the corpus-matched raw
-base. It is robust to the stopping rule: reporting the fixed-budget final epoch matches---in fact
-slightly exceeds---a variant that additionally early-stops on the validation fold, so the
+base. It is robust to the stopping rule: reporting the fixed-budget final epoch matches (in fact
+slightly exceeds) a variant that additionally early-stops on the validation fold, so the
 single-selection design loses nothing. This follows directly from the fine-tuning dynamics,
 which we profile across all $25$ folds: the mean validation-fold Spearman rises steeply from
 $0.44$ at initialization and \textbf{plateaus by roughly epoch $100$--$120$} at $\approx 0.60$,
-then holds---drifting slightly downward toward the $200$-epoch budget---while the \emph{training}
+then holds (drifting slightly downward toward the $200$-epoch budget) while the \emph{training}
 loss continues to descend monotonically. The fixed $200$-epoch budget therefore lands the encoder
 squarely on this converged plateau: past the point of diminishing validation return, but before
 meaningful overfitting. Consequently the exact stopping epoch is immaterial and a second,
 early-stopping use of the validation fold is unnecessary. The pattern mirrors the
-pretext-versus-downstream divergence of self-supervised pretraining (Section~4.4.1)---the
+pretext-versus-downstream divergence of self-supervised pretraining (Section~\ref{sec:budget}), the
 optimized loss keeps improving after the perceptually-relevant signal has saturated. (A
 direct-regression objective and a neutral-anchored,
 alpha-margin objective were also tried; both under-perform the ranking loss, the latter failing to
-generalize on pointing---consistent with the perceptual signal residing in the direct inter-state
+generalize on pointing, consistent with the perceptual signal residing in the direct inter-state
 ordering the ranking loss targets rather than in neutral-referenced context shifts.) In short, the
 human ratings are best used not as a metric fit on a fixed representation but as a {light,
 ranking-based fine-tuning of the encoder}.
 
 \subsection{Ablation---the pose head is necessary}
+\label{sec:poseablation}
 \begin{table}[h]
 \centering
 \setlength{\tabcolsep}{1pt}
@@ -637,8 +774,8 @@ ranking-based fine-tuning of the encoder}.
 \toprule
 Objective & Walking & Pointing & Picking \\
 \midrule
-motion-only (MAMP) & $+0.351 \pm 0.032$ & $+0.299 \pm 0.032$ & $+0.490 \pm 0.039$ \\
-{\ + pose head (MAMP+pose)} & $\mathbf{+0.552 \pm 0.026}$ & $\mathbf{+0.434 \pm 0.030}$ & $\mathbf{+0.543 \pm 0.033}$ \\
+motion-only (MAMP) & $.351{\scriptstyle\pm}.032$ & $.299{\scriptstyle\pm}.032$ & $.490{\scriptstyle\pm}.039$ \\
+{\ + pose head (MAMP+pose)} & $\mathbf{.552{\scriptstyle\pm}.026}$ & $\mathbf{.434{\scriptstyle\pm}.030}$ & $\mathbf{.543{\scriptstyle\pm}.033}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -652,11 +789,12 @@ the only encoder clearing both baselines on all three actions.
 
 \subsection{Summary of the per-action story}
 A single self-supervised encoder, with no perceptual supervision, beats both geometric baselines
-on all three actions under repeated nested cross-validation---including the expressively sparse
+on all three actions under repeated nested cross-validation, including the expressively sparse
 pointing action. Where the human ratings help further, it is by fine-tuning the encoder (Section
 6.4), which lifts all three actions above the already-baseline-beating raw encoder.
 
 \subsection{Full model sweep (all encoders, raw)}
+\label{sec:sweep}
 All values are from the same repeated nested cross-validation ($n=25$), evaluated on the canonical
 57 effort classes per action; each encoder's checkpoint is selected per fold on the disjoint
 validation fold from an 11-checkpoint uniform 100-epoch grid. The geometric bars each encoder must
@@ -666,23 +804,23 @@ that bar.
 
 \begin{table}[h]
 \centering
-\caption{Raw embeddings, Spearman ($n=25$, mean $\pm$ SE).}
-\setlength{\tabcolsep}{1pt}
-\small
+\caption{Raw embeddings, Spearman ($n=25$, mean $\pm$ SE). ``$\checkmark$'' marks encoders whose
+95\% CI clears all three baseline bars.}
+\setlength{\tabcolsep}{2pt}
 \small
 \begin{tabular}{lcccc}
 \toprule
-Encoder (backbone, objective) & Walking & Pointing & Picking & all 3? \\
+Encoder & Walking & Pointing & Picking & $\checkmark$? \\
 \midrule
-Plain, recon-only    & $+0.476{\pm}0.031$ & $+0.213{\pm}0.034$ & $+0.491{\pm}0.029$ & --- \\
-Plain, recon$+$vel   & $+0.472{\pm}0.026$ & $+0.205{\pm}0.039$ & $+0.399{\pm}0.037$ & --- \\
-Plain, velocity-only & $+0.321{\pm}0.033$ & $+0.362{\pm}0.036$ & $+0.471{\pm}0.033$ & --- \\
-MLD AE, recon-only   & $+0.532{\pm}0.023$ & $+0.331{\pm}0.039$ & $+0.498{\pm}0.029$ & --- \\
-MLD AE, recon$+$vel  & $+0.537{\pm}0.022$ & $+0.339{\pm}0.035$ & $+0.493{\pm}0.030$ & --- \\
-MLD AE, velocity-only& $+0.451{\pm}0.031$ & $+0.278{\pm}0.031$ & $+0.254{\pm}0.039$ & --- \\
-MLD VAE, recon-only  & $+0.597{\pm}0.021$ & $+0.324{\pm}0.032$ & $+0.501{\pm}0.029$ & --- \\
-MAMP (motion-only)   & $+0.351{\pm}0.032$ & $+0.299{\pm}0.032$ & $+0.490{\pm}0.039$ & --- \\
-{MAMP+pose}   & $\mathbf{+0.552{\pm}0.026}$ & $\mathbf{+0.434{\pm}0.030}$ & $\mathbf{+0.543{\pm}0.033}$ & $\checkmark$ \\
+Plain, recon-only    & $.476{\scriptstyle\pm}.031$ & $.213{\scriptstyle\pm}.034$ & $.491{\scriptstyle\pm}.029$ & --- \\
+Plain, recon$+$vel   & $.472{\scriptstyle\pm}.026$ & $.205{\scriptstyle\pm}.039$ & $.399{\scriptstyle\pm}.037$ & --- \\
+Plain, velocity-only & $.321{\scriptstyle\pm}.033$ & $.362{\scriptstyle\pm}.036$ & $.471{\scriptstyle\pm}.033$ & --- \\
+MLD AE, recon-only   & $.532{\scriptstyle\pm}.023$ & $.331{\scriptstyle\pm}.039$ & $.498{\scriptstyle\pm}.029$ & --- \\
+MLD AE, recon$+$vel  & $.537{\scriptstyle\pm}.022$ & $.339{\scriptstyle\pm}.035$ & $.493{\scriptstyle\pm}.030$ & --- \\
+MLD AE, velocity-only& $.451{\scriptstyle\pm}.031$ & $.278{\scriptstyle\pm}.031$ & $.254{\scriptstyle\pm}.039$ & --- \\
+MLD VAE, recon-only  & $.597{\scriptstyle\pm}.021$ & $.324{\scriptstyle\pm}.032$ & $.501{\scriptstyle\pm}.029$ & --- \\
+MAMP (motion-only)   & $.351{\scriptstyle\pm}.032$ & $.299{\scriptstyle\pm}.032$ & $.490{\scriptstyle\pm}.039$ & --- \\
+{MAMP+pose}   & $\mathbf{.552{\scriptstyle\pm}.026}$ & $\mathbf{.434{\scriptstyle\pm}.030}$ & $\mathbf{.543{\scriptstyle\pm}.033}$ & $\checkmark$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -693,18 +831,27 @@ stall on pointing at $+0.32$--$0.34$ (CI not clearing $0.370$), exactly the expr
 action the composition is built to capture. No competing encoder is strong on all three actions;
 each alternative is a specialist. The architecture and objective axes are separable and both
 matter: at a fixed reconstruction objective the MLD backbone beats the plain transformer, while at
-a fixed backbone it is the masked-motion-plus-pose objective---not reconstruction with or without a
-velocity term---that produces the only all-three winner. Section 6.8 tightens this into a direct
+a fixed backbone it is the masked-motion-plus-pose objective, not reconstruction with or without a
+velocity term, that produces the only all-three winner. Section~\ref{sec:skip-ablation} tightens this into a direct
 de-confound.
 
 \subsection{Disentangling architecture from objective---is it the pose head or the backbone?}
-The step from the reconstruction encoders to MAMP changes {two} things at once---the
+\label{sec:skip-ablation}
+The step from the reconstruction encoders to MAMP changes {two} things at once, the
 {objective} (reconstruction $\to$ masked prediction) and, implicitly, the {backbone},
 since the MLD reconstruction encoders carry U-Net skip connections while the MAMP encoder is a
 plain (skip-free) transformer. A skeptic could argue that MAMP+pose recovers configuration not
-because of the pose {objective} but because skip connections---the mechanism that lifts
-reconstruction pointing from $+0.213$ to $+0.331$---would do the same for masked prediction. We
-test this directly.
+because of the pose {objective} but because of the U-Net skip connections in the MLD backbone.
+We first isolate the skips themselves, then test whether they help the masked objective.
+
+{The skip connections are perceptually inert.} Toggling encoder skips on the plain reconstruction
+transformer moves pointing from $+0.213$ to $+0.221$ ($+0.008$); removing the encoder--decoder skips
+from the MLD SkipTransformer moves it by $-0.001$. In both architectures, at their native
+reconstruction objective, the skip connections change perceptual alignment within noise. So the
+$+0.118$ pointing gap between the plain transformer and the MLD encoder (Section~\ref{sec:step1}) is {not}
+attributable to the skips; it is a property of the MLD recipe as a whole. This already answers the
+skeptic, but we go further and ask whether transplanting the skips into the {masked} backbone,
+where they might interact differently with the objective, recovers configuration.
 
 {An MLD-style encoder inside MAMP.} We port the MLD SkipTransformer's {encoder-internal}
 U-Net into the MAMP encoder, holding the masked-motion objective, corpus, normalization, and split
@@ -712,41 +859,43 @@ fixed. Because MAMP masks $\approx$80\% of tokens before the encoder, we run the
 the {full, unmasked} sequence and route only the visible-position features to the decoder,
 so the encoder is train/inference-consistent and its skips operate on complete motion while the
 prediction task remains non-trivial (masked targets never leak to the decoder). We call this
-{MAMP-uencfull}; crucially it has {no pose head}, isolating the effect of the
-MLD-style {architecture} under the masked objective.
+{MAMP-uencfull}; it has {no pose head}, which isolates the effect of the
+MLD-style {encoder-internal skips}, not MLD's full recipe (which also couples a
+reconstruction objective and a cross-attention decoder), under the masked objective.
 
 \begin{table}[h]
 \centering
-\caption{Architecture vs.\ objective on the masked-prediction backbone ($n=25$, mean $\pm$ SE).}
+\caption{Architecture vs.\ objective on the masked-prediction backbone ($n=25$, mean $\pm$ SE).
+Encoders are motion-only unless marked $+$pose; only MAMP+pose clears all three baseline bars.}
 \small
-\setlength{\tabcolsep}{1pt}
-
-\begin{tabular}{lcccc}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccc}
 \toprule
-Encoder & Walking & Pointing & Picking & all 3? \\
+Encoder & Walking & Pointing & Picking \\
 \midrule
-MAMP (plain enc, motion-only)     & $+0.351{\pm}0.032$ & $+0.299{\pm}0.032$ & $+0.490{\pm}0.039$ & --- \\
-MAMP-uencfull (U-Net enc, motion-only) & $+0.470{\pm}0.029$ & $+0.275{\pm}0.028$ & $+0.566{\pm}0.030$ & --- \\
-{MAMP+pose (plain enc, $+$pose)} & $\mathbf{+0.552{\pm}0.026}$ & $\mathbf{+0.434{\pm}0.030}$ & $\mathbf{+0.543{\pm}0.033}$ & $\checkmark$ \\
+MAMP (plain enc.)        & $.351{\scriptstyle\pm}.032$ & $.299{\scriptstyle\pm}.032$ & $.490{\scriptstyle\pm}.039$ \\
+MAMP (U-Net enc.)        & $.470{\scriptstyle\pm}.029$ & $.275{\scriptstyle\pm}.028$ & $.566{\scriptstyle\pm}.030$ \\
+MAMP$+$pose (plain enc.) & $\mathbf{.552{\scriptstyle\pm}.026}$ & $\mathbf{.434{\scriptstyle\pm}.030}$ & $\mathbf{.543{\scriptstyle\pm}.033}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 The result is unambiguous on the discriminating axis. Giving MAMP the MLD-style U-Net encoder
-{does not recover pointing}: it moves from $+0.299$ to $+0.275$---statistically flat, if
-anything slightly lower---and remains below even the MLD reconstruction encoders' pointing and far
+{does not recover pointing}: it moves from $+0.299$ to $+0.275$, statistically flat, if
+anything slightly lower, and remains below even the MLD reconstruction encoders' pointing and far
 below the bar. The pose {objective}, by contrast, lifts pointing to $+0.434$ ($\approx$4\,SE
 gain). {The configuration recovery that carries pointing is supplied by the
 pose-reconstruction objective, not by the encoder architecture.} Two secondary observations sharpen
-the mechanism: the U-Net encoder is not inert---it lifts the coarse-motion actions (walking $+0.351
-\to +0.470$, and the best picking in the sweep, $+0.566$)---it simply does not manufacture the fine
+the mechanism: the U-Net encoder is not inert; it lifts the coarse-motion actions (walking $+0.351
+\to +0.470$, and the best picking in the sweep, $+0.566$); it simply does not manufacture the fine
 configuration signal the sparse pointing action requires; and we run it on the full, unmasked
 sequence deliberately, as the architecture's best case, since skips taken after masking (on the
 visible $\approx$20\% only) are uniformly weaker.
 
 We complete the $2\times 2$ of architecture $\times$ objective, since MLD's own recipe couples both
-skip connections and a reconstruction objective. The remaining cell---an MLD-style U-Net encoder
-trained {with} the pose objective---asks whether the two compound.
+encoder-internal skips and a reconstruction objective. The remaining cell, an MLD-style U-Net encoder
+(the skips only, transplanted into the masked backbone) trained {with} the pose objective, asks
+whether the two compound.
 
 \begin{table}[h]
 \centering
@@ -757,33 +906,155 @@ trained {with} the pose objective---asks whether the two compound.
 \toprule
  & plain encoder & MLD-style U-Net encoder \\
 \midrule
-motion-only & MAMP: $+0.299{\pm}0.032$ & uencfull: $+0.275{\pm}0.028$ \\
-$+$ pose    & MAMP+pose: $\mathbf{+0.434{\pm}0.030}$ & {[pending]} \\
+motion-only & MAMP: $.299{\scriptstyle\pm}.032$ & uencfull: $.275{\scriptstyle\pm}.028$ \\
+$+$ pose    & MAMP+pose: $\mathbf{.434{\scriptstyle\pm}.030}$ & uencfullpose: $.260{\scriptstyle\pm}.036$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-{[Placeholder---the MAMP-uencfull+pose cell is pending a training run; to be filled with the
-$n=25$ mean $\pm$ SE on completion. If its pointing exceeds $+0.434$, architecture and objective are
-complementary---the U-Net encoder's benefit unlocks only with the pose objective, echoing MLD's own
-coupling of skips with reconstruction; if $\approx +0.434$, the pose objective saturates
-configuration recovery and the architecture adds nothing on top. Either outcome does not alter the
-conclusion that the pose objective, not the backbone, recovers configuration.]}
+The completed cell is decisive: adding the MLD-style U-Net encoder to the pose objective does
+\emph{not} compound their benefits. Pointing falls to $+0.260$, the lowest in the entire
+grid, and roughly four standard errors below the plain-encoder MAMP+pose ($+0.434$). The two
+design choices are thus not merely non-additive but \emph{mutually interfering} on the
+discriminating axis. A plausible account is that MAMP+pose works precisely because the encoder is
+forced to build configuration into a \emph{dynamics-pressured latent}: the masked-prediction task
+compels the encoder's layers to model how the body moves, and the auxiliary pose head must satisfy
+its configuration target \emph{through} that same pressured representation. The full-visibility
+U-Net encoder gives its later layers direct access to early-layer, low-level per-frame detail,
+easing the pressure on the intermediate representation to abstract; the pose target can then be met
+using re-supplied literal detail rather than the dynamics-pressured latent, and the coupling that
+makes the composition effective is weakened. We offer this as a hypothesis, not a demonstrated
+mechanism. What the grid establishes firmly is the empirical claim: across all four cells, the
+pose-reconstruction \emph{objective} on the plain masked-prediction encoder is what recovers
+configuration; the encoder architecture neither substitutes for it (motion-only column) nor
+augments it ($+$pose row). MAMP+pose stands as the sole design competitive on all three actions,
+with no architectural rival.
+
+\emph{A note on the reconstruction/masked-prediction asymmetry.} The encoder-internal skip
+connections are perceptually \emph{inert} under a reconstruction objective (toggling them moves
+pointing within noise, above), yet under masked-prediction-plus-pose the full-visibility U-Net
+encoder actively \emph{hurts} ($+0.434\!\to\!+0.260$). The effect of detail-preserving architecture
+is thus not monotone across objectives: harmless where reconstruction already re-supplies detail,
+harmful where masked prediction's value \emph{is} the inference pressure it places on the
+representation, a pressure the skips relax by giving later layers direct access to early-layer
+per-frame detail. What is constant across objectives is that the skips never \emph{help} perception;
+the MLD reconstruction encoder's pointing advantage comes from its recipe as a whole, not its skips.
 
 % =====================================================================
-\section{Why MAMP+pose succeeds: modeling vs.\ copying}
+\section{Discussion}
+\subsection{Why MAMP+pose succeeds}
 The central mechanistic claim is the distinction between {modeling} dynamics and
 {copying} poses. Reconstruction objectives present the model with the entire visible motion
 and reward reproducing it; under full visibility, the velocities are reproduced for free as a
 byproduct of accurate pose copying, so a velocity term is partly redundant. Velocity-penalized
 reconstruction thus remains a {pose-biased} representation. Masked motion prediction removes
 the copying shortcut: with $\sim$80\% of patches hidden and the motion of the hidden, high-energy
-regions as the target, the encoder must infer kinematic progression it cannot observe---it must
+regions as the target, the encoder must infer kinematic progression it cannot observe; it must
 internalize how the body moves, not merely where it currently is. This is why motion-only masked
 prediction is the empirical complement of reconstruction. The auxiliary pose head restores the
-static-configuration fidelity reconstruction had. The {composition}---masked dynamics
-modeling plus pose reconstruction---supplies both capabilities in one encoder and is the only
+static-configuration fidelity reconstruction had. The {composition} (masked dynamics
+modeling plus pose reconstruction) supplies both capabilities in one encoder and is the only
 configuration competitive across all three heterogeneous actions; neither objective alone is.
+
+\subsection{Perceptual alignment is not faithful representation}
+\label{sec:dissociation}
+A natural prior is that a better motion encoder, one that represents motion more faithfully or has
+more capacity to do so, should align better with human similarity judgments. Our results contradict
+this prior in two independent ways. Both tests use the discriminating pointing action, where encoders
+spread most in perceptual alignment.
+
+\subsubsection{Dissociation 1: capacity improves reconstruction without improving perception}
+We scale the plain reconstruction transformer to the MLD encoder's parameter budget
+($35.0$M vs.\ $31.2$M; hidden $384$, $6$ heads, depth $7$), holding the reconstruction objective,
+corpus, normalization, and evaluation fixed. This high-capacity encoder \emph{reconstructs better
+than any other vanilla encoder we trained}, with its held-out reconstruction loss plateauing lowest
+($0.00305$ vs.\ the $9$M model's $0.00563$) and fastest, yet its perceptual alignment does not
+improve: pointing $+0.221 {\scriptstyle\pm} .037$, statistically identical to the $9$M model's
+$+0.213$, despite $3.9\times$ the parameters. Walking and picking, if anything, decline
+($.476\!\to\!.349$, $.491\!\to\!.301$; overfitting). Added capacity is spent entirely on
+reconstruction fidelity and buys no perceptual alignment. This also confirms that the
+plain-transformer $\to$ MLD pointing gap is not a matter of degrees of freedom.
+
+\subsubsection{Dissociation 2: perceptual alignment inversely tracks linear pose-decodability}
+Our similarity metric, like the geometric baselines, is a Euclidean ($L_2$) distance on embeddings.
+Only structure that is \emph{linearly accessible} in the embedding is visible to such a metric. We
+therefore ask how directly each encoder's embedding exposes per-frame pose, by training a linear
+(ridge) probe from the embedding to per-frame joint configuration (PCA-reduced targets, $k{=}16$
+components; GCV-selected ridge; padding masked; probe fit on training folds only, evaluated on the
+disjoint test fold). On pointing, perceptual alignment runs \emph{opposite} to linear
+pose-decodability, nearly monotonically:
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{Pointing: perceptual alignment vs.\ linear pose-decodability ($n=25$). The best perceiver
+decodes pose the \emph{least} linearly; the worst decodes it the most.}
+\begin{tabular}{lcc}
+\toprule
+Encoder & Perceptual (Spearman) & Linear pose $R^2$ \\
+\midrule
+MAMP$+$pose (best perceiver) & $\mathbf{.434}$ & $.509$ \\
+MLD (attention pool)         & $.424$ & $.548$ \\
+MLD (query pool)             & $.331$ & $.630$ \\
+Vanilla (query pool)         & $.216$ & $.657$ \\
+Vanilla (attention pool)     & $.213$ & $\mathbf{.727}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two controls establish that this is not a probe artifact and not an absence of pose. First, a
+\emph{nonlinear} (MLP) probe recovers substantially more pose from every encoder (e.g.\ MAMP+pose
+$.509\!\to\!.645$; worst vanilla $.727\!\to\!.829$) \emph{while preserving the same ordering}, so
+pose information is present in all encoders, including the winner; it is merely less
+\emph{linearly} accessible in the better perceivers. Second, per-frame velocity and acceleration are
+\emph{not} linearly decodable from any encoder ($R^2<0$ throughout), so the effect is not that the
+winner ``encodes dynamics instead of pose'' in a linearly-readable form.
+
+\paragraph{Scope.} This dissociation is testable only where encoders actually differ in
+decodability. Pointing is the sole action with a spread in linear pose-$R^2$ across encoders; on
+walking and picking, decodability is flat across encoders (and so cannot track a perceptual ordering
+that does vary). We therefore claim the inverse relationship for pointing only, and make no claim
+about a walking or picking mechanism; candidate accounts of the walking flatness (periodicity,
+padding, cross-clip variance) did not survive checking. We also distinguish the absolute
+decodability \emph{level} of an action from the between-encoder \emph{spread} within an action, and it
+is the latter that carries the dissociation.
+
+\paragraph{Interpretation.} We read the two dissociations together, and connect them to the
+\emph{dynamics-pressured latent} of Section~\ref{sec:skip-ablation}. Masked motion prediction forces
+the encoder to build configuration \emph{through} a representation shaped by inferring unobserved
+motion; the auxiliary pose target is satisfied through that same pressured latent rather than by
+copying literal per-frame detail. A consequence consistent with our measurements is that faithful
+per-frame pose, where present, is arranged so as to be \emph{less linearly extractable}, and thus
+less visible to an $L_2$ metric, in exactly the encoder that aligns best with perception. Capacity
+and reconstruction fidelity, meanwhile, improve the literal copy without improving alignment. We
+offer this as an interpretation, not a demonstrated mechanism; what the experiments establish is the
+empirical claim that perceptual alignment is not explained by reconstruction fidelity, by capacity,
+or by linearly accessible per-frame kinematics.
+
+% =====================================================================
+\section{Limitations and scope}
+\begin{itemize}
+\item {Pointing's narrower margin and higher variance.} MAMP+pose's raw encoder does beat
+both geometric baselines on pointing, but by the smallest margin and with the highest fold-to-fold
+variance; against the supervised TMR baseline it is behind on pointing both raw and after matched
+perceptual fine-tuning, the one action where a self-supervised encoder does not close the gap to
+large-scale semantic supervision.
+\item {Three action types.} Generalization to a broader action taxonomy is untested; the
+per-action heterogeneity we exploit may present differently elsewhere.
+\item {Rating-set size.} The human rating data ($\sim$1{,}540 trials/action) is modest,
+bounding how much the perceptual fine-tuning can reshape the encoder; a larger set might yield
+larger or more stable gains.
+\item {Polarized effort space.} We polarize each bipolar effort factor to $\{-1,0,+1\}$, so
+$d_{\text{perc}}$ measures dissimilarity among polar-effort combinations, not along the continuous
+intensity axis; graded-intensity perceptual distance is future work.
+\item {Learned-baseline conversion.} The TMR comparison requires a BVH$\to$SMPL$\to$263-D
+conversion ($\approx$4\,cm fit error) that slightly perturbs TMR's input; we frame our result as a
+conservative lower bound accordingly.
+\item {Interpretation of the pointing result.} Our account of why semantic supervision helps most
+on pointing (its communicative, kinematically sparse character) is an interpretation of the observed
+robustness pattern, not a separately tested causal claim.
+\end{itemize}
 
 % =====================================================================
 \section{Reproducibility}
@@ -801,7 +1072,7 @@ budget} (no second, early-stopping use of the validation fold).
 directories also contain non-canonical clips (single-effort and fully-polarized tuples) carrying
 {no} human ratings; these cannot enter any correlation, but if left in the pool that is
 shuffled to form the split they perturb which rated classes land in each fold and silently change
-every number---most severely for pointing. The split must shuffle the canonical 57 only. (An
+every number, most severely for pointing. The split must shuffle the canonical 57 only. (An
 earlier inability to reproduce the pointing baseline traced entirely to this.)
 
 {Per-pair target.} $d_{\text{perc}} = 1 - \text{count\_normalized}[(\text{selected}_0{=}0,
@@ -831,31 +1102,53 @@ end-to-end reproduction, along with the exact per-fold random seeds. The correct
 is computed on raw unpadded sequences (no frame-padding bias). Epoch counts are matched within a
 backbone family but not forced across families, where an epoch is not a comparable unit.
 
-% =====================================================================
-\section{Limitations and scope}
-\begin{itemize}
-\item {Pointing's narrower margin and higher variance.} MAMP+pose's raw encoder does beat
-both geometric baselines on pointing, but by the smallest margin and with the highest fold-to-fold
-variance; against the supervised TMR baseline the raw encoder is edged on pointing and wins only
-after the perceptual fine-tune.
-\item {Three action types.} Generalization to a broader action taxonomy is untested; the
-per-action heterogeneity we exploit may present differently elsewhere.
-\item {Rating-set size.} The human rating data ($\sim$1{,}540 trials/action) is modest,
-bounding how much the perceptual fine-tuning can reshape the encoder; a larger set might yield
-larger or more stable gains.
-\item {Polarized effort space.} We polarize each bipolar effort factor to $\{-1,0,+1\}$, so
-$d_{\text{perc}}$ measures dissimilarity among polar-effort combinations, not along the continuous
-intensity axis; graded-intensity perceptual distance is future work.
-\item {Learned-baseline conversion.} The TMR comparison requires a BVH$\to$SMPL$\to$263-D
-conversion ($\approx$4\,cm fit error) that slightly perturbs TMR's input; we frame our result as a
-conservative lower bound accordingly.
-\end{itemize}
+\subsection{Computing infrastructure}
+All experiments were run on a Slurm-managed cluster (Rocky Linux 8.10, Linux kernel 4.18) with
+NVIDIA H200 (141\,GB), A100 (80\,GB), and A30 (24\,GB) GPU partitions; each training and encoding
+job used a single GPU. Encoders were trained and evaluated under a common environment comprising Python
+3.10, PyTorch 2.4.1 (CUDA 12.1, cuDNN 9.1.0), torchvision 0.19.1, NumPy 2.2, SciPy 1.15,
+scikit-learn 1.7, pandas 2.3, einops 0.8, and timm 1.0; the DTW baseline uses \texttt{dtaidistance}~\citep{meert2020dtaidistance}
+2.4. The TMR baseline and its perceptual fine-tune run in a separate environment matching the
+released TMR code (Python 3.10, PyTorch 2.5.1/CUDA 12.1, Hydra 1.3, PyTorch-Lightning 2.6,
+Transformers~5). Exact per-fold random seeds ($42 + 1000\cdot\text{repeat}$), configuration files,
+and package versions are included with the code supplement so that results reproduce up to
+GPU-nondeterministic floating-point variation.
 
-% ---- plain-text citations retained for now; formalize into references.bib later ----
-% [Chen et al., CVPR 2023] Motion Latent Diffusion (MLD SkipTransformer)
-% [Mao et al., ICCV 2023] Masked Motion Prediction (MAMP)
-% [Petrovich et al., ICCV 2023] TMR: text-to-motion retrieval
-% [Kobayashi et al., 2023] Bandai-Namco Research Motion Dataset
-% CMU Graphics Lab Motion Capture Database (http://mocap.cs.cmu.edu/)
+% =====================================================================
+% =====================================================================
+\appendix
+\section{Pearson correlation supplement}
+\label{app:pearson}
+Spearman is our primary metric because the ground truth is ordinal and our metric optimizes ordinal
+inequalities (Section~\ref{sec:dissociation} notwithstanding, the target $d_{\text{perc}}$ is
+bounded-continuous, so a magnitude-based correlation is also meaningful on the target). We therefore
+report Pearson correlation between embedding $L_2$ distance and $d_{\text{perc}}$ as a supplement,
+computed on the identical pairs and folds as the Spearman results (so the Spearman numbers are
+unchanged). Pearson tracks Spearman closely and preserves the encoder ordering; it does not alter any
+conclusion. We keep Spearman primary because the distance-to-$d_{\text{perc}}$ relationship need only
+be monotone, not linear, for our claim (``closer embedding $\Rightarrow$ judged more similar'') to
+hold; Pearson additionally assumes linearity, which we do not require.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Raw-embedding Spearman vs.\ Pearson (Walking / Pointing / Picking, $n=25$). Pearson tracks
+Spearman; the encoder ordering is identical.}
+\begin{tabular}{lcc}
+\toprule
+Encoder & Spearman (W / P / K) & Pearson (W / P / K) \\
+\midrule
+MAMP$+$pose (headline) & $.554$ / $.435$ / $.543$ & $.569$ / $.472$ / $.604$ \\
+MLD-AE                 & $.521$ / $.325$ / $.490$ & $.537$ / $.342$ / $.535$ \\
+MAMP (motion-only)     & $.353$ / $.300$ / $.488$ & $.341$ / $.336$ / $.543$ \\
+Vanilla (rot1vel0)     & $.476$ / $.212$ / $.492$ & $.494$ / $.206$ / $.548$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% NOTE: aaai2027.sty already issues \bibliographystyle{aaai2027} when natbib is loaded,
+% so we do NOT repeat it here (a second \bibliographystyle triggers a BibTeX error).
+\bibliography{references}
 
 \end{document}

@@ -1,0 +1,175 @@
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage[submission]{aaai2027}  % DO NOT CHANGE THIS
+\usepackage[hyphens]{url}  % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm}  % DO NOT CHANGE THIS
+\usepackage{natbib}  % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\frenchspacing  % DO NOT CHANGE THIS
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+
+\setcounter{secnumdepth}{2}
+
+\title{Technical Appendix:\\ Motion Encoding for Human Perceptual Similarity}
+\author{Anonymous Submission}
+\affiliations{}
+
+\begin{document}
+\maketitle
+
+\noindent This appendix expands the checkpoint-selection protocol, the
+capacity-control experiment, and the linear/nonlinear decodability probes, and reports the Pearson
+correlations that accompany the primary Spearman metrics. The capacity-control and probe analyses
+provide the fuller evidence for the dissociation results summarized in the main paper; the Pearson
+correlations serve as a consistency check on the Spearman-based conclusions.
+
+% =====================================================================
+\section{Checkpoint-Selection Protocol}
+\label{app:checkpoint}
+
+Every encoder is pretrained under its own self-supervised objective (reconstruction, masked motion
+prediction, or masked prediction with the auxiliary pose head) to a fixed budget, with the full
+trajectory checkpointed every 100 epochs. The nested cross-validation harness is invoked as
+\begin{quote}\ttfamily\small
+cv\_nested.py --k 5 --repeats 5 \textbackslash\\
+\hspace*{1.5em}--n-triplet-seeds 5 --triplet-epochs 200
+\end{quote}
+producing, per outer fold, a three-way disjoint partition into TEST, SELECT, and TRAIN subsets. Raw
+Spearman correlation is reported on the TEST fold ($n=25 = 5\text{ folds} \times 5\text{ repeats}$).
+
+\paragraph{Which checkpoint is used.}
+For each fold, the evaluated checkpoint is chosen from a grid of every 100th epoch within
+$[100,\,\mathrm{PLATEAU}]$, where PLATEAU is the encoder's \emph{own} reconstruction-loss plateau
+epoch. Selection therefore ranges only over checkpoints up to the point at which the model's
+self-supervised reconstruction has converged. Within this window, the reported checkpoint is the one
+that maximizes the mean raw Spearman correlation across the three actions on the SELECT fold, so that
+\emph{perceptual} alignment---not reconstruction---determines which stored state is used. Two properties
+make this choice leakage-clean:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+\item PLATEAU is defined on the \emph{reconstruction} side --- the validation reconstruction loss
+  (\texttt{val\_recon}, mean squared error in normalized space on a $5\%$ held-out split, seed $0$) ---
+  never on perceptual performance. This keeps the SELECT fold from being used twice.
+\item PLATEAU is \emph{model-intrinsic}, not the arbitrary end of a training trajectory (training
+  length is a scheduling artifact). The SELECT fold only chooses \emph{within} the converged window;
+  it does not set its boundary.
+\end{itemize}
+
+\paragraph{Operational definition of the plateau.}
+The validation reconstruction curve is smoothed with a 3-point moving average. The asymptote is the
+minimum over the final $20\%$ of the trajectory. PLATEAU is the first grid-100 epoch at which the
+smoothed curve first falls to $\le 1.02\times$ the asymptote and remains $\le 1.03\times$ the asymptote
+thereafter. The headline result is stable across the selection window (ceiling-invariance): it is
+essentially unchanged whether checkpoints are drawn from $[0,\mathrm{PLATEAU}]$,
+$[0,2\cdot\mathrm{PLATEAU}]$, or the full trajectory. The masked-prediction family can diverge if
+over-trained; for these models PLATEAU is taken as the pre-divergence epoch under the same rule.
+
+\paragraph{Folds, seeds, and hardware.}
+Evaluation uses $5\text{ repeats}\times 5\text{ folds}$ nested cross-validation ($n=25$) with stratified
+seeds $42 + 1000\cdot\text{repeat}$; folds shuffle only the canonical 57 Effort classes per action, and
+perceptual fine-tuning runs for a fixed 200-epoch budget without early stopping on test sets.
+Experiments ran on Rocky Linux 8.10 nodes with NVIDIA A100 (80\,GB) and H200 (141\,GB) GPUs, using
+PyTorch 2.4.1, CUDA 12.1, and Python 3.10; TMR baselines used PyTorch 2.5.1 and PyTorch-Lightning 2.6.
+
+% =====================================================================
+\section{Capacity-Control Experiment}
+\label{app:capacity}
+
+To test whether the reconstruction backbone's perceptual advantage is merely a matter of model size, we
+scaled the plain reconstruction transformer to match the MLD backbone's parameter budget (35.0M
+parameters; hidden dimension $384$, $6$ attention heads, depth $7$; identical reconstruction objective
+and pretraining corpus). Table~\ref{tab:capacity-supp} reports the outcome.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{Capacity control: scaling the plain reconstruction transformer to the MLD budget. Larger
+capacity lowers reconstruction loss to the best of any encoder we trained, yet does not improve
+perceptual alignment.}
+\label{tab:capacity-supp}
+\begin{tabular}{lcc}
+\toprule
+Quantity & Small ($\approx$9M) & Large ($35.0$M) \\
+\midrule
+Val.\ reconstruction loss & $.00563$ & $\mathbf{.00305}$ \\
+Pointing $\rho$ & $.213{\scriptstyle\pm}.034$ & $.221{\scriptstyle\pm}.037$ \\
+Walking $\rho$ & $\mathbf{.476}$ & $.349$ \\
+Picking $\rho$ & $\mathbf{.491}$ & $.301$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The larger model reconstructs best of any encoder we trained ($.00305$ versus $.00563$) and plateaus
+faster, yet pointing alignment is statistically unchanged ($.221$ vs.\ $.213$) and walking and picking
+decline as the model overfits the reconstruction target. A $3.9\times$ increase in parameters therefore
+buys better reconstruction and zero perceptual gain, so the MLD-over-plain-transformer pointing gap
+($\approx\!0.11$) is driven by architecture and objective rather than by parameter count.
+
+% =====================================================================
+\section{Decodability Probes}
+\label{app:probe}
+
+Section~8 of the main paper reports that, on pointing, perceptual alignment runs inversely to the
+linear decodability of per-frame pose. This section gives the probe setup and the full nonlinear
+control.
+
+\paragraph{Linear (ridge) probe.}
+For each frozen encoder we fit a ridge-regression probe from the mean-pooled embedding to per-frame
+joint pose. Pose targets are reduced to $k=16$ PCA components and standardized per dimension; padded
+frames are masked out; the ridge coefficient is set by generalized cross-validation. Decodability is
+reported as $R^2$ on held-out frames under the same fold structure as the perceptual evaluation.
+
+\paragraph{Nonlinear (MLP) control.}
+To rule out a weak-probe artifact, we repeat the analysis with a multilayer-perceptron probe of the
+same targets. The nonlinear probe recovers substantially more pose from every encoder (for MAMP+pose,
+$R^2$ rises from $.509$ to $.645$; for the vanilla attention-pooling encoder, from $.727$ to $.829$)
+while \emph{preserving the ordering} across encoders. Two conclusions follow: the inverse relationship
+is not an artifact of linear probing, and per-frame pose is present in every encoder, including the
+best-aligned one. The difference is that, in the encoders that align most closely with perception, pose
+is arranged so as to be less \emph{linearly} accessible and therefore less visible to the $L_2$ metric
+that both the learned and geometric distances use. A supporting control confirms that per-frame
+velocity and acceleration are \emph{not} linearly decodable from any encoder ($R^2 < 0$ throughout), so
+no encoder simply stores per-frame dynamics in linearly accessible form.
+
+\paragraph{Action specificity.}
+The inverse alignment-versus-decodability relationship is measurable only on pointing, the action on
+which the encoders separate enough in both quantities. On walking and picking, linear pose decodability
+is essentially flat across encoders and does not track perceptual alignment; we therefore make no
+mechanistic claim for those actions.
+
+% =====================================================================
+\section{Pearson Correlation Analysis}
+\label{app:pearson}
+Table~\ref{tab:pearson-supp} reports Pearson correlation ($r$) for the main evaluation splits, as a
+magnitude counterpart to the primary Spearman ($\rho$) results in the main paper. The Pearson metrics
+preserve the same encoder ordering as those Spearman results, so the ordinal conclusions are unchanged
+under a linear-correlation criterion.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{Pearson correlation ($r$) across actions (Walking / Pointing / Picking, $n=25$).}
+\label{tab:pearson-supp}
+\begin{tabular}{lc}
+\toprule
+Encoder & Pearson $r$ (W / P / K) \\
+\midrule
+MAMP+pose & $.569$ / $.472$ / $.604$ \\
+MLD AE & $.537$ / $.342$ / $.535$ \\
+MAMP (Motion-only) & $.341$ / $.336$ / $.543$ \\
+Vanilla AE & $.494$ / $.206$ / $.548$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

@@ -1,0 +1,122 @@
+% ============================================================================
+% references.bib  --- Motion Encoding for Human Perceptual Similarity (AAAI-2027)
+% NOTE: entries below are drafted from known publication facts. Fields marked
+% "% VERIFY" should be double-checked against the official proceedings / DBLP
+% before camera-ready (page numbers, exact venue strings, arXiv ids).
+% ============================================================================
+
+% --- Core method baselines (the three learned models we build on / compare to) ---
+
+@inproceedings{chen2023mld,
+  title     = {Executing Your Commands via Motion Diffusion in Latent Space},
+  author    = {Chen, Xin and Jiang, Biao and Liu, Wen and Huang, Zilong and Fu, Bin and Chen, Tao and Yu, Gang},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2023}
+}
+
+@inproceedings{mao2023mamp,
+  title     = {Masked Motion Predictors are Strong 3D Action Representation Learners},
+  author    = {Mao, Yunyao and Deng, Jiajun and Zhou, Wengang and Fang, Yao and Ouyang, Wanli and Li, Houqiang},
+  booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year      = {2023}
+}
+
+@inproceedings{petrovich2023tmr,
+  title     = {{TMR}: Text-to-Motion Retrieval Using Contrastive 3D Human Motion Synthesis},
+  author    = {Petrovich, Mathis and Black, Michael J. and Varol, G{\"u}l},
+  booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year      = {2023}
+}
+
+% --- Motion-capture corpora / datasets used in pretraining & evaluation ---
+
+% mahmood2019amass — REMOVED (duplicate; canonical entry with pages lives in fundaRef.bib)
+
+@inproceedings{guo2022humanml3d,
+  title     = {Generating Diverse and Natural 3D Human Motions from Text},
+  author    = {Guo, Chuan and Zou, Shihao and Zuo, Xinxin and Wang, Sen and Ji, Wei and Li, Xingyu and Cheng, Li},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2022}
+}
+
+@misc{cmumocap,
+  title        = {{CMU} Graphics Lab Motion Capture Database},
+  author       = {{Carnegie Mellon University Graphics Lab}},
+  year         = {2003},
+  howpublished = {\url{http://mocap.cs.cmu.edu/}},
+  note         = {Accessed 2026}
+}
+
+@article{kobayashi2023bandai,
+  title   = {Motion Capture Dataset for Practical Use of {AI}-based Motion Editing and Stylization},
+  author  = {Kobayashi, Makito and others},
+  journal = {arXiv preprint},
+  year    = {2023}
+}
+
+% --- Tools / methods (SMPL fitting, DTW) ---
+
+@inproceedings{bogo2016smplify,
+  title     = {Keep It {SMPL}: Automatic Estimation of 3D Human Pose and Shape from a Single Image},
+  author    = {Bogo, Federica and Kanazawa, Angjoo and Lassner, Christoph and Gehler, Peter and Romero, Javier and Black, Michael J.},
+  booktitle = {European Conference on Computer Vision (ECCV)},
+  year      = {2016}
+}
+
+@article{loper2015smpl,
+  title   = {{SMPL}: A Skinned Multi-Person Linear Model},
+  author  = {Loper, Matthew and Mahmood, Naureen and Romero, Javier and Pons-Moll, Gerard and Black, Michael J.},
+  journal = {ACM Transactions on Graphics (TOG)},
+  volume  = {34},
+  number  = {6},
+  year    = {2015}
+}
+
+@misc{meert2020dtaidistance,
+  title        = {{DTAIDistance}: Time Series Distances},
+  author       = {Meert, Wannes and others},
+  howpublished = {\url{https://github.com/wannesm/dtaidistance}},
+  year         = {2020}
+}
+
+% --- Laban Movement Analysis / effort qualities (background for the stimulus space) ---
+
+@book{laban1971effort,
+  title     = {Effort: Economy of Human Movement},
+  author    = {Laban, Rudolf and Lawrence, Frederick C.},
+  publisher = {Macdonald and Evans},
+  year      = {1974}
+}
+
+% --- DTW for human motion (added 2026-07-26, verified real) ---
+@book{muller2007ir,
+  title     = {Information Retrieval for Music and Motion},
+  author    = {M{\"u}ller, Meinard},
+  year      = {2007},
+  publisher = {Springer Berlin Heidelberg},
+  address   = {Berlin, Heidelberg},
+  doi       = {10.1007/978-3-540-74048-3}
+}
+
+@article{kovar2004extraction,
+  title   = {Automated Extraction and Parameterization of Motions in Large Data Sets},
+  author  = {Kovar, Lucas and Gleicher, Michael},
+  journal = {ACM Transactions on Graphics},
+  volume  = {23},
+  number  = {3},
+  pages   = {559--568},
+  year    = {2004},
+  publisher = {ACM}
+}
+
+@article{yurtman2014rehab,
+  title   = {Automated Evaluation of Physical Therapy Exercises Using Multi-Template Dynamic Time Warping on Wearable Sensor Signals},
+  author  = {Yurtman, Aras and Barshan, Billur},
+  journal = {Computer Methods and Programs in Biomedicine},
+  volume  = {117},
+  number  = {2},
+  pages   = {189--207},
+  year    = {2014},
+  publisher = {Elsevier},
+  doi     = {10.1016/j.cmpb.2014.07.003}
+}

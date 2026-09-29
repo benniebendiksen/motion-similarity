@@ -1,0 +1,48 @@
+{
+  "raw": {
+    "walking": {
+      "mamp": 0.462,
+      "tmr": 0.452,
+      "median_delta": -0.007,
+      "p_two_sided": 0.8506035603712152,
+      "verdict": "tie (n.s.)"
+    },
+    "pointing": {
+      "mamp": 0.302,
+      "tmr": 0.425,
+      "median_delta": -0.109,
+      "p_two_sided": 0.007130416751032799,
+      "verdict": "TMR > MAMP+pose"
+    },
+    "picking": {
+      "mamp": 0.481,
+      "tmr": 0.408,
+      "median_delta": 0.044,
+      "p_two_sided": 0.010583547137015181,
+      "verdict": "MAMP+pose > TMR"
+    }
+  },
+  "fine_tuned": {
+    "walking": {
+      "mamp": 0.699,
+      "tmr": 0.649,
+      "median_delta": 0.026,
+      "p_two_sided": 0.025530902344391215,
+      "verdict": "MAMP+pose > TMR"
+    },
+    "pointing": {
+      "mamp": 0.463,
+      "tmr": 0.573,
+      "median_delta": -0.088,
+      "p_two_sided": 0.0025818996630628094,
+      "verdict": "TMR > MAMP+pose"
+    },
+    "picking": {
+      "mamp": 0.605,
+      "tmr": 0.611,
+      "median_delta": 0.003,
+      "p_two_sided": 0.9785339807274146,
+      "verdict": "tie (n.s.)"
+    }
+  }
+}
