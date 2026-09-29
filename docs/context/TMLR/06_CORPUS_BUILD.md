@@ -33,6 +33,23 @@ duration, start/end, captions`) — *what published TMR trained on*.
 Output convention shared by every route: **ROOT Hips + 28 articulated joints** (round-trip-verified identical
 hierarchy between `amass_cmu_flat` and `cmu_all_perform`), **Frame Time 0.033333 (30 fps)**.
 
+### 1.1 Dataset origins (upstream of the release we consumed)
+- **HumanML3D (keystone — clip set, crops, captions).** EricGuo5513/HumanML3D — <https://github.com/EricGuo5513/HumanML3D>
+  (Guo et al., CVPR 2022). The exact id→path/start/end/captions we align to is TMR's mirror of these annotations:
+  Mathux/TMR — <https://github.com/Mathux/TMR> → `datasets/annotations/humanml3d/annotations.json` (*what published
+  TMR trained on*). HumanML3D itself is derived from AMASS + HumanAct12, which is why our corpus is multi-route.
+- **AMASS subsets** (KIT, BMLmovi, Eyes_Japan, MPI_HDM05, BioMotionLab/BMLrub, EKUT, ACCAD, TotalCapture, …).
+  AMASS project, MPI-IS — <https://amass.is.tue.mpg.de/> (Mahmood et al., ICCV 2019). Distributed as per-subset
+  **SMPL-H `.npz`**; free account/registration required. This is each subset's only unified distributed form.
+- **CMU.** Original mocap: **CMU Graphics Lab Motion Capture Database** — <http://mocap.cs.cmu.edu/> (free, funded by
+  NSF EIA-0196217). The BVH conversion we consume is the **cgspeed** re-release (B. Hahne), *Motionbuilder-friendly*
+  variant (standard CMU skeleton) — <https://sites.google.com/a/cgspeed.com/cgspeed/motion-capture/cmu-bvh-conversion>;
+  the `cmuconvert-mb2-*.zip` archives are hosted on **MediaFire** (fetched via `mediafire_dl_mb.py`). *(The co-hosted
+  "Daz-friendly" variant is the wrong skeleton — see §5.)*
+- **HumanAct12.** Original: **Action2Motion** (Guo et al., ACM MM 2020) — <https://ericguo5513.github.io/action-to-motion/>
+  (raw 24-joint positions, Google Drive folder `1TBY2x…`). **The version we use is NOT this raw source** but
+  HumanML3D's own re-processed **`pose_data/humanact12.zip`** shipped inside the HumanML3D repo above (see §2.3/§5).
+
 ---
 
 ## 2. Conversion recipe — every source, reproducibly
@@ -121,10 +138,11 @@ Both were caught by fidelity gates *before* corrupting the corpus, and both are 
 Takeaway: **byte/float-level agreement with the reference dataset's own artifacts is the only reliable source
 check**; shape and count checks are necessary but not sufficient.
 
-## 6. Scripts & key paths (all on chimera under `.../virtual_reality/triplets/`)
-`align_corpus_v2.py` (AMASS caption coverage) · `mediafire_dl_mb.py` (CMU mb2 fetch) · `bvhconv_lib.py` (sanitized
-converter) · `cmu_roundtrip.py`, `cmu_convert_248.py` (CMU gate + convert) · `ha12_gate.py` (HA12 source gate).
-Data: `datasets/{amass_cmu_flat, cmu_all_perform, _cmu_mb_raw, _cmu_248_out, _humanact12_h3d, _cmu_missing_ids.txt}`.
-Keystone: `learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json`. Reference:
+## 6. Scripts & key paths
+**Version-controlled** in `repro_bundle/06_corpus_build/` (see its README): `align_corpus_v2.py` (AMASS caption
+coverage) · `mediafire_dl_mb.py` (CMU mb2 fetch) · `cmu_roundtrip.py`, `cmu_convert_248.py` (CMU gate + convert) ·
+`ha12_gate.py` (HA12 source gate). Regenerated on chimera: `bvhconv_lib.py` = `head -377 bvhConverterToPerform.py`.
+Chimera data (`.../virtual_reality/triplets/`): `datasets/{amass_cmu_flat, cmu_all_perform, _cmu_mb_raw,
+_cmu_248_out, _humanact12_h3d, _cmu_missing_ids.txt}`. Keystone:
+`learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json`. Reference:
 `…/HumanML3D/new_joint_vecs/000001.npy`. joints2smpl: `learned_baselines/bvh2tmr_pipeline/joints2smpl/`.
-*(For the repro bundle these scripts should be version-controlled alongside this doc.)*
