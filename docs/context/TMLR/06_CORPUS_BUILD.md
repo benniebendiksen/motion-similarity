@@ -11,13 +11,13 @@ ACCAD 277, + smaller subsets) + **1,191 HumanAct12**. The keystone that defines 
 captions is TMR's `learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json` (`id → path,
 duration, start/end, captions`) — *what published TMR trained on*.
 
-**Status (2026-09-28).**
+**Status (2026-09-30).**
 
 | Source | Clips | State |
 |---|---|---|
 | AMASS (non-CMU) | 10,510 src | ✅ aligned to captions (99.99%) |
 | CMU | all HumanML3D CMU | ✅ complete — round-trip **byte-exact** |
-| HumanAct12 | 1,191 | ✅ **source validated** (gate passed); positions→CMU rotations (joints2smpl) **pending** |
+| HumanAct12 | 1,191 | ✅ source validated **+ SMPL fit COMPLETE** (1,191/1,191, MPJPE median 3.02 cm); SMPL→CMU-34 back-half **pending** |
 | shared finish | — | crop-per-annotation, caption-align, banks, norm-stats, held-out — **pending** |
 
 ---
@@ -28,7 +28,7 @@ duration, start/end, captions`) — *what published TMR trained on*.
 |---|---|---|---|---|
 | **AMASS non-CMU** (KIT, BMLmovi, Eyes_Japan, MPI_HDM05, BioMotionLab, EKUT, ACCAD, …) | AMASS SMPL-H (already retargeted → `datasets/amass_cmu_flat`, 13,647) | `SMPL-H → SMPL-24 BVH (smpl2bvh) → CMU-34, lerp/slerp resample →30fps` (`amass/*`) | `annotations.json` path → retargeted filename, exact per-source (`align_corpus_v2.py`) | **10,509/10,510 (99.99%)**, 1 edge miss |
 | **CMU** | cgspeed **Motionbuilder-friendly** BVH (`cmuconvert-mb2-*`, standard CMU skeleton) + existing `cmu_all_perform` | `bvhConverterToPerform.prepare_files`: drop `Neck/RThumb/LThumb` → `adjustFrameRate(30)` (120→30, 4:1) → `fix_end_sites` | round-trip: convert mb `80_63`, compare to `cmu_all_perform/80_63.bvh` (`cmu_roundtrip.py`) | **MAX abs diff = 0** (28 joints, 568 frames) |
-| **HumanAct12** | **HumanML3D `pose_data/humanact12.zip`** (24-joint SMPL positions, HumanML3D frame) — *not* raw action-to-motion | *(pending)* `positions → joints2smpl (fit_seq.py) → SMPL params → SMPL→BVH→CMU-34` | source gate: `joints_to_guofeats(clip)` vs `new_joint_vecs/000001` (`ha12_gate.py`) | **non-feet max 0.037 (float match)**; feet 2/35 frames (binarization) |
+| **HumanAct12** | **HumanML3D `pose_data/humanact12.zip`** (24-joint SMPL positions, HumanML3D frame) — *not* raw action-to-motion | `[:22] + scale→SMPL + ground → joints2smpl SMPLify3D (batched) → SMPL params → SMPL→BVH→CMU-34` (`ha12_batch_fit.py`) | (1) source gate `joints_to_guofeats` vs `new_joint_vecs/000001`; (2) per-clip reconstruction MPJPE | (1) non-feet max 0.037, feet 2/35 frames; (2) **MPJPE mean 3.09 / median 3.02 / p95 4.29 / max 6.69 cm** (n=1,191; >5 cm = 1%) |
 
 Output convention shared by every route: **ROOT Hips + 28 articulated joints** (round-trip-verified identical
 hierarchy between `amass_cmu_flat` and `cmu_all_perform`), **Frame Time 0.033333 (30 fps)**.
@@ -95,10 +95,40 @@ and distributes the result as **`pose_data/humanact12.zip`** in the HumanML3D re
   residual is **2/35 foot-contact frames** flipping (velocity-threshold binarization — negligible, and
   DATASETS.md explicitly notes this "small difference").
 - The earlier `datasets/_humanact12_raw` (action-to-motion) is **SUPERSEDED — do not use it.**
-- **Remaining (GPU):** these are SMPL *positions*; our corpus needs 34-joint 6-D *rotations*, so convert
-  `positions → joints2smpl (learned_baselines/bvh2tmr_pipeline/joints2smpl/fit_seq.py) → SMPL params → SMPL→BVH→
-  CMU-34`. Per-clip fidelity gates: reconstruction MPJPE (fitted SMPL joints vs input) + left/right-semantic
-  check via HumanAct12 action labels (`A0101`=squat, etc.).
+
+**Fit: positions → SMPL rotations (COMPLETE, 2026-09-30).** HumanAct12 is the only source distributed as
+3-D joint *positions*, not rotations, so each clip is fit to the SMPL body model (neutral gender) via
+**SMPLify3D** (joints2smpl), `joint_category="AMASS"` using the first 22 SMPL joints, 150 LBFGS iterations.
+Output kept = per-frame `poses[F,72]` (axis-angle) + `trans[F,3]`; **betas are left neutral** because the
+downstream `smpl2bvh` emits a fixed-shape SMPL skeleton and the retarget imposes the CMU skeleton — so only the
+**rotations** propagate to the corpus. Pre-processing per clip: slice to 22 joints, **scale-normalize** (below),
+then ground (subtract the constant `[root_x₀, min_y_over_clip, root_z₀]` → frame-0 root at XZ origin, lowest
+point on the floor; preserves all relative motion and heading). Driver:
+`learned_baselines/bvh2tmr_pipeline/joints2smpl/ha12_batch_fit.py` (batched — each clip fit in 128-frame chunks
+in one optimization for GPU throughput; frames fit independently from the mean-pose init).
+
+**Scale normalization — the key fidelity step.** HumanAct12 skeletons vary in overall size per actor
+(pelvis→neck 0.43–0.55 m; stature ≈ 1.1–1.5 m) whereas SMPL-neutral is fixed (~1.7 m, pelvis→neck ≈ 0.51 m).
+When a clip's skeleton is far from SMPL size, shape parameters cannot absorb the gap and the fit leaves a large
+residual that *corrupts the recovered joint angles* — the fit, not the data, is at fault. We therefore rescale
+each clip so its mean pelvis→neck length equals **0.51 m** before fitting (`scale = 0.51 / mean‖J₁₂ − J₀‖`,
+stored per clip). This is lossless for our purpose (rotations are scale-invariant; the retarget sets absolute
+size) and has the side benefit of placing HumanAct12 at the same metric scale as the SMPL-native AMASS clips.
+Diagnosis that isolated scale as the cause (on the high-MPJPE tail): more iterations did not help
+(150 ≡ 300, i.e. converged), and per-frame warm-start barely helped (7.65 → 7.38 cm at ~9× the cost), whereas
+scaling halved the error (7.65 → 3.94 cm); clips already at SMPL scale were unchanged (3.00 → 3.02 cm).
+
+**Result (gate 2 — reconstruction MPJPE, fitted SMPL joints vs. input, n = 1,191):**
+mean **3.09 cm**, median **3.02 cm**, p95 **4.29 cm**, max **6.69 cm**; only **1 %** of clips exceed 5 cm
+(vs. 24 % without scaling) and 9 % exceed 4 cm (vs. 38 %). Scale factors spanned 0.89–1.21 (median 1.02).
+Outputs: `datasets/_humanact12_smpl_scaled/<clip>.npz` (`poses, trans, mpjpe, scale, fps=20`). Compute: pomplun
+H200 + chimera24 H200-MIG array (`ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch`); ~50 s/clip full-GPU,
+~80–120 s/clip on a 35 GB MIG slice. (A transient shared-scratch write failure killed several MIG shards
+mid-run; the driver skips already-written clips, so a resubmit resumed cleanly.)
+
+- **Remaining (back half, CPU, pending):** `SMPL params → pack + resample 20→30 fps (reuse amass
+  resample_rotvec/resample_trans) → smpl2bvh (--gender NEUTRAL --fps 30) → retarget_amass_to_cmu_batch.py →
+  CMU-34`, identical to the AMASS route's second half so output lands format-identical to `amass_cmu_flat`.
 
 ---
 
@@ -128,13 +158,19 @@ no arbitrariness it lacks. **Consistency is guaranteed at the OUTPUT (34-joint 6
 gate.** (Strict single-route alternative — AMASS-CMU credentialed re-download for byte-parity on CMU — was rejected:
 it *adds* SMPL-fit error to CMU and needs AMASS credentials, for ~20% of the corpus.)
 
-## 5. Lessons — two wrong-source traps (methods-appendix material)
-Both were caught by fidelity gates *before* corrupting the corpus, and both are easy to fall into:
-1. **CMU:** the obvious cgspeed "Daz-friendly" release has a Poser skeleton incompatible with the standard-CMU
-   pipeline; the **Motionbuilder-friendly** release is the correct one.
-2. **HumanAct12:** the obvious action-to-motion release is *not* what HumanML3D uses; HumanML3D ships its own
-   re-processed `pose_data/humanact12.zip`. Matching shapes ≠ matching data — only the guofeats-vs-reference gate
-   revealed it.
+## 5. Lessons — fidelity traps (methods-appendix material)
+All caught by fidelity gates *before* corrupting the corpus, and all easy to fall into:
+1. **CMU wrong release:** the obvious cgspeed "Daz-friendly" release has a Poser skeleton incompatible with the
+   standard-CMU pipeline; the **Motionbuilder-friendly** release is the correct one.
+2. **HumanAct12 wrong source:** the obvious action-to-motion release is *not* what HumanML3D uses; HumanML3D ships
+   its own re-processed `pose_data/humanact12.zip`. Matching shapes ≠ matching data — only the
+   guofeats-vs-reference gate revealed it.
+3. **HumanAct12 fit scale:** fitting SMPL to raw-scale positions left a large residual on ~a quarter of clips
+   (>5 cm MPJPE) that corrupted the recovered *rotations*. The cause was **skeleton-size mismatch**, not optimizer
+   settings — confirmed by the MPJPE gate: more iterations were inert (converged) and per-frame warm-start barely
+   moved it, but **per-clip scale-normalization to SMPL size halved the error** and cut the >5 cm tail from 24 % to
+   1 %. Lesson: when a model-fitting step leaves a structured residual, suspect a *scale/units* mismatch before
+   reaching for more compute; gate on reconstruction error, not on convergence.
 Takeaway: **byte/float-level agreement with the reference dataset's own artifacts is the only reliable source
 check**; shape and count checks are necessary but not sufficient.
 
@@ -142,7 +178,12 @@ check**; shape and count checks are necessary but not sufficient.
 **Version-controlled** in `repro_bundle/06_corpus_build/` (see its README): `align_corpus_v2.py` (AMASS caption
 coverage) · `mediafire_dl_mb.py` (CMU mb2 fetch) · `cmu_roundtrip.py`, `cmu_convert_248.py` (CMU gate + convert) ·
 `ha12_gate.py` (HA12 source gate). Regenerated on chimera: `bvhconv_lib.py` = `head -377 bvhConverterToPerform.py`.
+HA12 fit (on chimera, `learned_baselines/bvh2tmr_pipeline/joints2smpl/`): `ha12_batch_fit.py` (scale-norm +
+batched SMPLify), `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch` (pomplun / H200-MIG arrays),
+`ha12_fit_diag.py` + `ha12_scale_test.py` + `ha12_scale_test2.py` (the warm-start / iters / scale diagnostics);
+SMPL→BVH tool re-cloned at `fit3d/third_party/smpl2bvh`. *(TODO: copy the HA12 fit scripts into
+`repro_bundle/06_corpus_build/` for the release.)*
 Chimera data (`.../virtual_reality/triplets/`): `datasets/{amass_cmu_flat, cmu_all_perform, _cmu_mb_raw,
-_cmu_248_out, _humanact12_h3d, _cmu_missing_ids.txt}`. Keystone:
+_cmu_248_out, _humanact12_h3d, _humanact12_smpl_scaled, _cmu_missing_ids.txt}`. Keystone:
 `learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json`. Reference:
 `…/HumanML3D/new_joint_vecs/000001.npy`. joints2smpl: `learned_baselines/bvh2tmr_pipeline/joints2smpl/`.

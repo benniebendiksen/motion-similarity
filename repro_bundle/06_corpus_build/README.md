@@ -15,6 +15,13 @@ edit the `TR` constant at the top of each script for another host. Python 3, num
 | `cmu_roundtrip.py` | CMU fidelity gate: convert mb `80_63`, require it to reproduce `cmu_all_perform/80_63.bvh` | MAX abs diff = 0 |
 | `cmu_convert_248.py` | Convert the 248 CMU source ids `cmu_all_perform` lacked, through the round-trip-proven pipeline | 248/248, 28 joints, 30 fps |
 | `ha12_gate.py` | HumanAct12 source-correctness gate: `joints_to_guofeats(clip)` vs HumanML3D `new_joint_vecs/000001` | see note |
+| `ha12_batch_fit.py` | HumanAct12 positions → SMPL params via SMPLify3D: `[:22]` + **scale→SMPL (pelvis→neck=0.51 m)** + ground → batched fit (B=128 chunks); saves `poses,trans,mpjpe,scale,fps=20` per clip | **n=1,191: MPJPE mean 3.09 / median 3.02 / max 6.69 cm; >5 cm = 1%** |
+| `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch` | SLURM arrays running `ha12_batch_fit.py` (pomplun H200 / chimera24 H200-MIG), resumable (skips existing npz) | 1,191/1,191 |
+| `ha12_fit_diag.py`, `ha12_scale_test.py`, `ha12_scale_test2.py` | Diagnostics that isolated **scale** (not iters/warm-start) as the tail cause: batched@150≡@300 (converged), warm-start 7.65→7.38 (inert), scale 7.65→3.94 (halved); and single-bone vs multi-bone scale comparison | — |
+
+Needs the j2s_gpu env with a **CUDA-12 torch** (`torch 2.4.1+cu121`) for H200s, plus `smplx`, `h5py`,
+`chumpy` and the SMPL-neutral model + joints2smpl assets (`neutral_smpl_mean_params.h5`, `gmm_08.pkl`).
+The SMPL→BVH tool `smpl2bvh` (Fukazawa) lives at `fit3d/third_party/smpl2bvh` on chimera.
 
 **`ha12_gate.py` note.** As checked in, the `clip` path points at the *raw action-to-motion*
 source (`_humanact12_raw/…`) — this is the **failing diagnostic** run (mean diff 0.30, all four
