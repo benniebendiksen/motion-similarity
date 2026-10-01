@@ -5,11 +5,43 @@ caption-aligned, banks + norm-stats, held-out-clean — one unified corpus for a
 published TMR's training set by construction** (so a Tier-1 TMR-objective vs published-TMR comparison isolates
 representation/conversion, not corpus). Decided 2026-09-26: do it right, gate every route.
 
-**Scope.** HumanML3D = **14,614 clips** (×2 with left/right mirrors = 29,228 annotation ids). Sources:
-**13,423 AMASS** (KIT 4647, CMU 2913, BMLmovi 1839, Eyes_Japan 1465, MPI_HDM05 771, BioMotionLab 373, EKUT 350,
-ACCAD 277, + smaller subsets) + **1,191 HumanAct12**. The keystone that defines the exact clip set + crops +
-captions is TMR's `learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json` (`id → path,
-duration, start/end, captions`) — *what published TMR trained on*.
+**Scope.** We match the **full HumanML3D corpus** — i.e. **TMR's HumanML3D benchmark**, the larger of TMR's two
+training sets. ⚠ This is **not** the smaller, KIT-only **KIT-ML** benchmark: HumanML3D re-captions the *entire*
+AMASS collection **+ HumanAct12**, so every constituent below (CMU, BMLmovi, Eyes_Japan, … and KIT) is
+text-labeled — KIT is just the single largest subset *within* HumanML3D, not the whole corpus. The keystone
+defining the exact clip set + crops + captions is TMR's
+`learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json` (`id → path, duration,
+start/end, captions`; all 29,228 entries carry ≥1 caption — verified).
+
+**14,614 clips** (×2 with L/R mirrors = 29,228 annotation ids), from **18 constituent source datasets** grouped
+into **3 processing routes** by highest-fidelity available source (see §4):
+
+| Constituent dataset | clips | Processing route |
+|---|---:|---|
+| KIT | 4,647 | **R1 — AMASS SMPL-H** → SMPL-24 BVH → CMU-34 |
+| CMU | 2,913 | **R2 — CMU-native** cgspeed BVH → CMU-34 (byte-exact round-trip) |
+| BMLmovi | 1,839 | R1 |
+| Eyes_Japan_Dataset | 1,465 | R1 |
+| humanact12 | 1,191 | **R3 — positions → SMPLify fit** → SMPL → BVH → CMU-34 |
+| MPI_HDM05 | 771 | R1 |
+| BioMotionLab_NTroje | 373 | R1 |
+| EKUT | 350 | R1 |
+| ACCAD | 277 | R1 |
+| DFaust_67 | 135 | R1 |
+| MPI_Limits | 132 | R1 |
+| MPI_mosh | 122 | R1 |
+| Transitions_mocap | 110 | R1 |
+| TotalCapture | 74 | R1 |
+| SFU | 68 | R1 |
+| BMLhandball | 67 | R1 |
+| HumanEva | 50 | R1 |
+| SSM_synced | 30 | R1 |
+| **TOTAL** | **14,614** | R1 = 10,510 · R2 = 2,913 · R3 = 1,191 |
+
+By provenance 13,423 clips are **AMASS** (of which CMU's 2,913 take the higher-fidelity CMU-native route **R2**,
+the other 10,510 take the SMPL-H route **R1**) and 1,191 are **HumanAct12** (route **R3**). Routes are detailed
+in §2; all three land in the **same** 34-joint 6-D CMU / 30 fps output so clips are format-identical regardless of
+constituent.
 
 **Status (2026-09-30).**
 
@@ -54,7 +86,7 @@ hierarchy between `amass_cmu_flat` and `cmu_all_perform`), **Frame Time 0.033333
 
 ## 2. Conversion recipe — every source, reproducibly
 
-### 2.1 AMASS (non-CMU), 13,423 clips
+### 2.1 Route R1 — AMASS SMPL-H (16 subsets, 10,510 clips: KIT, BMLmovi, Eyes_Japan, MPI_HDM05, BioMotionLab_NTroje, EKUT, ACCAD, DFaust_67, MPI_Limits, MPI_mosh, Transitions_mocap, TotalCapture, SFU, BMLhandball, HumanEva, SSM_synced)
 Already retargeted in `datasets/amass_cmu_flat` (13,647 clips ⊇ HumanML3D's AMASS; the extra are non-HumanML3D
 AMASS subsets like GRAB/DanceDB, harmless — we intersect with `annotations.json`). Pipeline: `amass/
 amass_smplh_to_bvh_batch.py` (SMPL-H `.npz` → SMPL-24 BVH via smpl2bvh, R_x(−90°) root fix, per-clip gender/fps)
@@ -63,7 +95,7 @@ amass_smplh_to_bvh_batch.py` (SMPL-H `.npz` → SMPL-24 BVH via smpl2bvh, R_x(�
 (`EKUT_265_SLP102_cmu33_30fps`); **10,509/10,510 resolve**. Note: 2,341 source clips map to multiple HumanML3D
 ids (distinct start/end + captions) → the shared **crop stage (§3)** slices per `annotations.json`.
 
-### 2.2 CMU, all HumanML3D CMU clips
+### 2.2 Route R2 — CMU-native (CMU, 2,913 clips)
 2,500 already in `cmu_all_perform`; the 248 source ids it lacked (`datasets/_cmu_missing_ids.txt`, 16 subjects:
 30,31,36,54,55,62,63,64,76,78,80,90,91,118,139,144) were reconstructed:
 1. **Right release matters.** cgspeed ships a **Daz-friendly** (Poser skeleton: `hip/abdomen/chest/rShldr/rThumb1`)
@@ -80,7 +112,7 @@ ids (distinct start/end + captions) → the shared **crop stage (§3)** slices p
    pipeline proven the *same* one that built cmu_all_perform. `cmu_convert_248.py` → 248 outputs in
    `datasets/_cmu_248_out/`, all 28-joint/30 fps, 0 bad. Full CMU = 2,500 + 248.
 
-### 2.3 HumanAct12, 1,191 clips — the key handling
+### 2.3 Route R3 — HumanAct12 positions→SMPL fit (humanact12, 1,191 clips) — the key handling
 **⚠ HumanML3D does NOT use raw action-to-motion HumanAct12.** From HumanML3D's `raw_pose_processing.ipynb`
 (cell 13): *"The source data from **HumanAct12** is already included in `./pose_data` in this repository. You need
 to **unzip** it."* — and its crop loop applies **no** transform to humanact12 (no start/end crop, no `x*=-1`,
