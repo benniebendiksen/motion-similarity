@@ -207,14 +207,19 @@ Takeaway: **byte/float-level agreement with the reference dataset's own artifact
 check**; shape and count checks are necessary but not sufficient.
 
 ## 6. Scripts & key paths
-**Version-controlled** in `repro_bundle/06_corpus_build/` (see its README): `align_corpus_v2.py` (AMASS caption
-coverage) · `mediafire_dl_mb.py` (CMU mb2 fetch) · `cmu_roundtrip.py`, `cmu_convert_248.py` (CMU gate + convert) ·
-`ha12_gate.py` (HA12 source gate). Regenerated on chimera: `bvhconv_lib.py` = `head -377 bvhConverterToPerform.py`.
-HA12 fit (on chimera, `learned_baselines/bvh2tmr_pipeline/joints2smpl/`): `ha12_batch_fit.py` (scale-norm +
-batched SMPLify), `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch` (pomplun / H200-MIG arrays),
-`ha12_fit_diag.py` + `ha12_scale_test.py` + `ha12_scale_test2.py` (the warm-start / iters / scale diagnostics);
-SMPL→BVH tool re-cloned at `fit3d/third_party/smpl2bvh`. *(TODO: copy the HA12 fit scripts into
-`repro_bundle/06_corpus_build/` for the release.)*
+**All three routes are version-controlled** in `repro_bundle/06_corpus_build/` (see its README for the per-route
+table + deps):
+- **R1 (AMASS):** `amass_smplh_to_bvh_batch.py` (SMPL-H→SMPL-24 BVH), `retarget_amass_to_cmu_batch.py`
+  (BVH→CMU-33), `align_corpus_v2.py` (caption coverage).
+- **R2 (CMU):** `mediafire_dl_mb.py`, `cmu_roundtrip.py`, `cmu_convert_248.py` (+ the CMU converter
+  `bvhReader/bvhConverterToPerform.py`; `bvhconv_lib.py` = `head -377` of it).
+- **R3 (HumanAct12):** `ha12_gate.py`, `ha12_batch_fit.py` (scale-norm + batched SMPLify),
+  `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch`, and the diagnostics
+  `ha12_fit_diag.py` / `ha12_scale_test.py` / `ha12_scale_test2.py`.
+- **Shared core:** `bvhReader/` — third-party BVH library (alinen/bvh-python, **GPL-v3**, LICENSE included),
+  extended for retargeting; `retarget.py` is called by every route. External deps: PyGLM, torch, numpy, matplotlib.
+- Still **chimera-only** (environment, not code): the `smpl2bvh` clone at `fit3d/third_party/smpl2bvh` and the
+  joints2smpl assets (SMPL-neutral model, `neutral_smpl_mean_params.h5`, `gmm_08.pkl`).
 Chimera data (`.../virtual_reality/triplets/`): `datasets/{amass_cmu_flat, cmu_all_perform, _cmu_mb_raw,
 _cmu_248_out, _humanact12_h3d, _humanact12_smpl_scaled, _cmu_missing_ids.txt}`. Keystone:
 `learned_baselines/tmr/repo/datasets/annotations/humanml3d/annotations.json`. Reference:
