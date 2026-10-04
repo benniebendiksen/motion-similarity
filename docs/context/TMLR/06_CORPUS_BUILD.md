@@ -50,7 +50,7 @@ constituent.
 | AMASS (non-CMU) | 10,510 src | ✅ aligned to captions (99.99%) |
 | CMU | 2,035 HumanML3D | ✅ **COMPLETE via AMASS-CMU** (SMPL+H G) — co-register 100%, MISSING=0 (cgspeed superseded) |
 | HumanAct12 | 1,191 | ✅ **COMPLETE** — SMPL fit (median 3.02 cm) + back-half; 1,191/1,191 CMU BVH (hierarchy == `amass_cmu_flat`) |
-| shared finish | — | ✅ **COMPLETE** — 14,613-clip `hml3d_cmu_flat` + caption (40,384 caps) + DistilBERT/MPNet banks + `norm_stats_hml3d` + held-out PASS |
+| shared finish | — | ✅ **COMPLETE + VERIFIED** — 14,612-clip `hml3d_cmu_flat` (1 NaN dropped) + caption (40,384 caps) + DistilBERT/MPNet banks + `norm_stats_hml3d` + held-out PASS + format-identity |
 
 ---
 
@@ -180,7 +180,8 @@ second half so output lands format-identical to `amass_cmu_flat`:
 
 ## 3. Shared finish (COMPLETE 2026-10-04) — `build_hml3d_stage1.py` + bank/norm copies
 1. **Flatten + intersect** the 3 routes to HumanML3D's exact set (resolve each `annotations.json` source → its
-   route BVH; drop non-HumanML3D AMASS extras). → **14,613 clips** (1 KIT edge-drop: `KIT/9/WalkInCounterClockwiseCircle07`).
+   route BVH; drop non-HumanML3D AMASS extras). → **14,612 clips** (14,614 − 1 KIT edge-drop
+   `KIT/9/WalkInCounterClockwiseCircle07` − 1 NaN clip `KIT_1226_Trial_62` dropped post-verification).
 2. **Crop to exact annotation windows** (now safe — all routes co-register): whole-clip windows symlinked (8,393),
    genuine sub-span windows cropped (6,220). GATE: 0 clips with ≤0 frames (the earlier garbage was CMU
    misregistration, cured by the AMASS-CMU route); lengths min 3 / median 225 / max 704 frames.
@@ -191,9 +192,22 @@ second half so output lands format-identical to `amass_cmu_flat`:
    204 channels, 14,612 clips (1 NaN-clip skipped). ⚠ **92/204 degenerate channels (std<0.05)** vs cut1's 45 —
    ~14 fully-constant joints align with the retarget's structural stubs (clavicles absorbed, palm stubs,
    near-identity LowerBack); ties to the normalization-lever note ([[project_input_readout_findings]]).
-6. **Held-out: PASS** — 0 overlap between the 14,613 corpus clips and the 486 LMA eval clips (`lma_perform*`).
-- **Artifacts:** `datasets/hml3d_cmu_flat/` + `hml3d_captioned.json` + `hml3d_text_{distilbert_tokens,mpnet}.pt`
+6. **Held-out: PASS** — 0 overlap between the corpus clips and the 486 LMA eval clips (`lma_perform*`).
+- **Artifacts:** `datasets/hml3d_cmu_flat/` (14,612) + `hml3d_captioned.json` + `hml3d_text_{distilbert_tokens,mpnet}.pt`
   + `norm_stats_hml3d.npz`. cut1 artifacts untouched. Update [[reference_canonical_results_tree]] when models train on it.
+  *(Banks were computed pre-drop (14,613); the dropped NaN clip leaves 1 inert stale entry in the MPNet bank — the
+  dataloader lists the BVH dir so it is never loaded.)*
+
+### 3.1 Verification (`_corpus_verify.py`, 2026-10-04)
+- **Format identity — perfect:** all 14,612 clips share one 33-joint hierarchy (0 mismatches), 30 fps, 0 missing,
+  0 empty-caption.
+- **Value sanity:** rotation channels (joints 1–33) all within [−1, 1]; the ±16 extremes are root (joint 0)
+  translation (world units) — expected.
+- **NaN:** exactly 1 (`KIT_1226_Trial_62`) → dropped.
+- **Per-route degeneracy is STRUCTURAL, not HA12:** R1 91 / R2 92 / R3 99 of 204 — uniform across routes, so the
+  degenerate channels are the retarget's structural stubs, not HA12 fit stiffness. The 45→92 rise vs cut1 is from
+  *correcting* the corpus (cut1 wrongly carried extra non-HumanML3D subsets whose diversity lifted channels above
+  the floor); the leaner HumanML3D-only set is more homogeneous. Not a regression.
 
 ---
 
