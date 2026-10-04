@@ -185,7 +185,7 @@ second half so output lands format-identical to `amass_cmu_flat`:
 2. **Crop to exact annotation windows** (now safe — all routes co-register): whole-clip windows symlinked (8,393),
    genuine sub-span windows cropped (6,220). GATE: 0 clips with ≤0 frames (the earlier garbage was CMU
    misregistration, cured by the AMASS-CMU route); lengths min 3 / median 225 / max 704 frames.
-3. **Caption-align** → `datasets/hml3d_captioned.json` (14,613 entries, 40,384 unique captions).
+3. **Caption-align** → `datasets/hml3d_captioned.json` (**14,612** entries after the NaN drop; 40,384 unique captions).
 4. **Banks** (`probes/{distilbert_token_precompute,text_precompute}_hml3d.py`, tmr env, GPU): DistilBERT-token bank
    = 40,384 captions (full coverage); MPNet bank = 14,613 clips (full coverage).
 5. **Norm-stats** (`compute_norm_hml3d.py`, canonical builder + DEGENERATE_EPS=0.05): `norm_stats_hml3d.npz`,
