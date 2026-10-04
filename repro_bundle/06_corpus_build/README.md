@@ -29,9 +29,11 @@ The 18 constituents are converted by **three routes** that all emit the identica
 | `ha12_batch_fit.py` | R3 | HumanAct12 positions → SMPL params via SMPLify3D: `[:22]` + **scale→SMPL (pelvis→neck=0.51 m)** + ground → batched fit (B=128 chunks); saves `poses,trans,mpjpe,scale,fps=20` per clip | **n=1,191: MPJPE mean 3.09 / median 3.02 / max 6.69 cm; >5 cm = 1%** |
 | `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch` | R3 | SLURM arrays running `ha12_batch_fit.py` (pomplun H200 / chimera24 H200-MIG), resumable (skips existing npz) | 1,191/1,191 |
 | `ha12_fit_diag.py`, `ha12_scale_test.py`, `ha12_scale_test2.py` | R3 | Diagnostics that isolated **scale** (not iters/warm-start) as the tail cause: batched@150≡@300 (converged), warm-start 7.65→7.38 (inert), scale 7.65→3.94 (halved); single-vs-multi-bone scale | — |
+| `ha12_params_to_bvh.py` | R3 back-half A | SMPL params `[F,72]`→`[F,24,3]` (no palm-pad, no basis change — fit was Y-up), resample 20→30 (slerp/lerp), → **smpl2bvh** → SMPL-24 BVH@30fps. **Sets `MKL_THREADING_LAYER=GNU`** or the smpl2bvh subprocess dies ("incompatible with libgomp") | 1,191/1,191, 24 joints |
+| `ha12_stageA.sbatch` / `ha12_stageB.sbatch` | R3 back-half | A: array running `ha12_params_to_bvh.py` (resumable). B (chained `afterok`): `retarget_amass_to_cmu_batch.py` on the SMPL-24 tree → CMU-33 | **1,191/1,191 CMU BVH; 28 joints + 30 fps; joint names == `amass_cmu_flat`; Y-up upright (orientation gate)** |
 
-**Back half** (SMPL params → corpus, R3, pending): `pack + resample 20→30 → smpl2bvh → retarget_amass_to_cmu_batch.py`.
-The R3 back half reuses R1's `retarget_amass_to_cmu_batch.py` + `bvhReader/` verbatim, so HA12 lands format-identical.
+The R3 back half reuses R1's `retarget_amass_to_cmu_batch.py` + `bvhReader/` verbatim, so HA12 lands
+format-identical to the AMASS corpus. Output: `datasets/_humanact12_cmu/` (final CMU-33 BVH @30fps).
 
 ## Shared retarget core — `bvhReader/`
 

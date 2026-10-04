@@ -49,7 +49,7 @@ constituent.
 |---|---|---|
 | AMASS (non-CMU) | 10,510 src | ✅ aligned to captions (99.99%) |
 | CMU | all HumanML3D CMU | ✅ complete — round-trip **byte-exact** |
-| HumanAct12 | 1,191 | ✅ source validated **+ SMPL fit COMPLETE** (1,191/1,191, MPJPE median 3.02 cm); SMPL→CMU-34 back-half **pending** |
+| HumanAct12 | 1,191 | ✅ **COMPLETE** — SMPL fit (median 3.02 cm) + SMPL→CMU-34 back-half; 1,191/1,191 CMU BVH (28 joints, 30 fps, hierarchy == `amass_cmu_flat`) in `datasets/_humanact12_cmu/` |
 | shared finish | — | crop-per-annotation, caption-align, banks, norm-stats, held-out — **pending** |
 
 ---
@@ -158,9 +158,18 @@ H200 + chimera24 H200-MIG array (`ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch`
 ~80–120 s/clip on a 35 GB MIG slice. (A transient shared-scratch write failure killed several MIG shards
 mid-run; the driver skips already-written clips, so a resubmit resumed cleanly.)
 
-- **Remaining (back half, CPU, pending):** `SMPL params → pack + resample 20→30 fps (reuse amass
-  resample_rotvec/resample_trans) → smpl2bvh (--gender NEUTRAL --fps 30) → retarget_amass_to_cmu_batch.py →
-  CMU-34`, identical to the AMASS route's second half so output lands format-identical to `amass_cmu_flat`.
+**Back half: SMPL params → CMU-34 BVH (COMPLETE, 2026-10-02).** Two stages, identical to the AMASS route's
+second half so output lands format-identical to `amass_cmu_flat`:
+- **Stage A** (`ha12_params_to_bvh.py`): `poses[F,72] → [F,24,3]` (already 24-joint SMPL axis-angle — no
+  palm-pad; **no Z-up→Y-up basis change**, since the fit was done in Y-up, unlike AMASS) → resample 20→30 fps
+  (slerp rotations / lerp trans) → `smpl2bvh --gender NEUTRAL --fps 30` → SMPL-24 BVH. ⚠ the driver sets
+  `MKL_THREADING_LAYER=GNU` or the smpl2bvh subprocess aborts (MKL/libgomp clash when the numpy-importing parent
+  spawns it). → 1,191/1,191, 24 joints.
+- **Stage B** (`retarget_amass_to_cmu_batch.py`, the R1 retargeter verbatim): SMPL-24 BVH → CMU-33 →
+  `datasets/_humanact12_cmu/`. **1,191/1,191** (`ok=1191 skipped=0 failed=0`); aggregate gate: all **28 joints +
+  30 fps**, joint hierarchy **identical to `amass_cmu_flat`**, and **Y-up/upright** (orientation gate: HA12 and
+  AMASS both have tallest-axis=y, head above root — no flip despite HA12 skipping the basis change).
+  Compute: chimera24 H200-MIG (6-shard Stage A array + chained Stage B); env `j2s_gpu` (has glm+torch+smplx).
 
 ---
 
@@ -214,8 +223,9 @@ table + deps):
 - **R2 (CMU):** `mediafire_dl_mb.py`, `cmu_roundtrip.py`, `cmu_convert_248.py` (+ the CMU converter
   `bvhReader/bvhConverterToPerform.py`; `bvhconv_lib.py` = `head -377` of it).
 - **R3 (HumanAct12):** `ha12_gate.py`, `ha12_batch_fit.py` (scale-norm + batched SMPLify),
-  `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch`, and the diagnostics
-  `ha12_fit_diag.py` / `ha12_scale_test.py` / `ha12_scale_test2.py`.
+  `ha12_fit_array.sbatch` / `ha12_fit_mig.sbatch`, the diagnostics
+  `ha12_fit_diag.py` / `ha12_scale_test.py` / `ha12_scale_test2.py`, and the **back half**
+  `ha12_params_to_bvh.py` (+ `ha12_stageA.sbatch` / `ha12_stageB.sbatch`).
 - **Shared core:** `bvhReader/` — third-party BVH library (alinen/bvh-python, **GPL-v3**, LICENSE included),
   extended for retargeting; `retarget.py` is called by every route. External deps: PyGLM, torch, numpy, matplotlib.
 - Still **chimera-only** (environment, not code): the `smpl2bvh` clone at `fit3d/third_party/smpl2bvh` and the
