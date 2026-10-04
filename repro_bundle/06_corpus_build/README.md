@@ -68,3 +68,21 @@ structural). If retargets are regenerated, re-QC per subset — see `amass/qc_no
   `smpl2bvh` tool (Fukazawa) lives at `fit3d/third_party/smpl2bvh` on chimera.
 - **Correct HumanAct12 fetch:**
   `curl -L https://raw.githubusercontent.com/EricGuo5513/HumanML3D/main/pose_data/humanact12.zip`.
+
+## CMU correction (R2) + shared finish
+
+**R2 CMU is AMASS-CMU, not cgspeed** (corrected 2026-10-04 for TMR-consistency — TMR's CMU is the AMASS subset;
+cgspeed is a different conversion/extent, `80_63` 18.9 s vs 37.9 s, 74% co-reg). CMU runs the **R1 pipeline**:
+`run_cmu_stageA.sbatch` (AMASS-CMU SMPL+H G → SMPL-24 BVH) → `run_cmu_stageB.sbatch` (retarget → CMU-33);
+`_verify_cmu_coreg.py` gates on annotation-`duration` ≈ clip-duration (→ 100%). The cgspeed scripts
+(`mediafire_dl_mb`, `cmu_roundtrip`, `cmu_convert_248`) are kept for provenance only.
+
+**Shared finish** (all CPU/GPU-light, reuse validated code):
+| Script | Stage | Output |
+|---|---|---|
+| `build_hml3d_stage1.py` | flatten 3 routes + intersect to HumanML3D + crop to annotation windows + caption-align | `hml3d_cmu_flat/` (14,613 clips: 8,393 whole symlinks + 6,220 crops) + `hml3d_captioned.json` (40,384 caps) |
+| `distilbert_token_precompute_hml3d.py` / `text_precompute_hml3d.py` | DistilBERT-token + MPNet banks (tmr env, GPU) | `hml3d_text_{distilbert_tokens,mpnet}.pt` (full coverage) |
+| `compute_norm_hml3d.py` | per-channel norm (canonical builder, EPS=0.05) | `norm_stats_hml3d.npz` (204 ch; 92 degenerate — mostly retarget structural stubs) |
+| `_heldout_check.py` | eval-clip overlap gate | PASS (0 overlap with 486 LMA eval clips) |
+
+Corpus = full HumanML3D (TMR benchmark), **nonmirror-only**; cut1 artifacts untouched.
